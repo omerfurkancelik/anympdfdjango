@@ -1,0 +1,91 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center">
+    <!-- Hero Section -->
+    <div class="w-full bg-white rounded-lg shadow-card overflow-hidden mb-10">
+        <div class="gradient-bg h-2"></div>
+        <div class="px-8 py-16 md:py-20 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-6 text-gray-800">Academic Article Review System</h1>
+            <p class="text-xl text-gray-600 mb-10 max-w-2xl mx-auto">A seamless platform for submitting, tracking, and reviewing academic articles with professional feedback from experts.</p>
+            <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                <a href="{% url 'upload_article' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-md font-medium">Submit Your Article</a>
+                <a href="{% url 'track_article' %}" class="bg-gray-800 hover:bg-gray-900 text-white px-8 py-4 rounded-md font-medium">Track Submission</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="w-full mb-12">
+        <h2 class="text-3xl font-bold text-center mb-10 text-gray-800">How It Works</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="bg-white p-8 rounded-lg shadow-card">
+                <div class="text-indigo-600 text-4xl mb-4 flex justify-center">
+                    <i class="fas fa-upload"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-center">Submit</h3>
+                <p class="text-gray-600 text-center">Upload your article as a PDF file. Provide your email to receive a unique tracking code.</p>
+            </div>
+            <div class="bg-white p-8 rounded-lg shadow-card">
+                <div class="text-indigo-600 text-4xl mb-4 flex justify-center">
+                    <i class="fas fa-search-location"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-center">Track</h3>
+                <p class="text-gray-600 text-center">Monitor your article's status using your tracking code and communicate with editors throughout the process.</p>
+            </div>
+            <div class="bg-white p-8 rounded-lg shadow-card">
+                <div class="text-indigo-600 text-4xl mb-4 flex justify-center">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-3 text-center">Review</h3>
+                <p class="text-gray-600 text-center">Receive professional feedback from expert referees and editors in your field.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Benefits Section -->
+    <div class="w-full bg-white rounded-lg shadow-card overflow-hidden mb-10">
+        <div class="p-8">
+            <h2 class="text-3xl font-bold text-center mb-10 text-gray-800">Benefits</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex items-start">
+                    <div class="text-indigo-600 mr-4">
+                        <i class="fas fa-check-circle text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Secure Submissions</h3>
+                        <p class="text-gray-600">Your articles are securely stored and only accessible to authorized reviewers and editors.</p>
+                    </div>
+                </div>
+                <div class="flex items-start">
+                    <div class="text-indigo-600 mr-4">
+                        <i class="fas fa-bolt text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Efficient Process</h3>
+                        <p class="text-gray-600">Streamlined workflow ensures your article moves through the review process quickly.</p>
+                    </div>
+                </div>
+                <div class="flex items-start">
+                    <div class="text-indigo-600 mr-4">
+                        <i class="fas fa-comments text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Direct Communication</h3>
+                        <p class="text-gray-600">Chat directly with editors to address questions and concerns about your submission.</p>
+                    </div>
+                </div>
+                <div class="flex items-start">
+                    <div class="text-indigo-600 mr-4">
+                        <i class="fas fa-eye text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Real-time Tracking</h3>
+                        <p class="text-gray-600">Monitor your article's status at any time with your unique tracking code.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

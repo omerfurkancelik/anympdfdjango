@@ -1,0 +1,75 @@
+{% extends 'articles/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Article Chat: {{ article.tracking_code }}</h1>
+                <a href="{% url 'track_article' %}" class="text-indigo-600 hover:text-indigo-700">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Tracking
+                </a>
+            </div>
+            
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">Tracking Code</p>
+                        <p class="font-medium text-gray-800">{{ article.tracking_code }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Status</p>
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                            {% if article.status == 'submitted' %}bg-blue-100 text-blue-800
+                            {% elif article.status == 'under_review' %}bg-yellow-100 text-yellow-800
+                            {% elif article.status == 'revision_required' %}bg-orange-100 text-orange-800
+                            {% elif article.status == 'accepted' %}bg-green-100 text-green-800
+                            {% elif article.status == 'rejected' %}bg-red-100 text-red-800{% endif %}">
+                            {{ article.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Messages -->
+            <div class="bg-gray-50 p-4 rounded-lg mb-6 h-96 overflow-y-auto">
+                {% if chat_messages %}
+                    {% for message in chat_messages %}
+                    <div class="mb-4 {% if message.sender_user.email != 'editor1@test.com' %}ml-auto max-w-md bg-indigo-100 text-gray-800{% else %}mr-auto max-w-md bg-gray-200 text-gray-800{% endif %} p-3 rounded-lg">
+                        <div class="text-xs font-medium mb-1 {% if message.sender_user.email != 'editor1@test.com' %}text-indigo-600{% else %}text-gray-600{% endif %}">
+                            {{ message.sender_name }}
+                        </div>
+                        <div class="text-sm">{{ message.content }}</div>
+                        <div class="text-xs text-gray-500 mt-1 text-right">{{ message.timestamp|date:"M d, Y H:i" }}</div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="flex items-center justify-center h-full">
+                        <p class="text-gray-500 italic">No messages yet. Start a conversation with the editor.</p>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Message Form -->
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                {{ form|crispy }}
+                
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md font-medium">
+                    <i class="fas fa-paper-plane mr-2"></i> Send Message
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-scroll to bottom of chat on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        var chatContainer = document.querySelector('.overflow-y-auto');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    });
+</script>
+{% endblock %}

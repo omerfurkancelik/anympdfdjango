@@ -1,0 +1,134 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Review Article: {{ article.tracking_code }}</h1>
+                <a href="{% url 'editor_dashboard' %}" class="text-indigo-600 hover:text-indigo-700">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Dashboard
+                </a>
+            </div>
+            
+            <!-- Article Information -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">Tracking Code</p>
+                        <p class="font-medium text-gray-800">{{ article.tracking_code }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Author Email</p>
+                        <p class="font-medium text-gray-800">{{ article.email }}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Submission Date</p>
+                        <p class="font-medium text-gray-800">{{ article.submission_date|date:"F j, Y" }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Article Preview & Download -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <h2 class="text-lg font-bold mb-4 text-gray-800">Article File</h2>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-file-pdf text-red-500 text-2xl mr-3"></i>
+                        <span class="text-gray-800">{{ article.file.name|cut:"articles/" }}</span>
+                    </div>
+                    <a href="{% url 'download_article' article.id %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-download mr-2"></i> Download
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Referee Assignment & Status Update Form -->
+            <form method="post" class="mb-6">
+                {% csrf_token %}
+                
+                <!-- Status Update -->
+                <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                    <h2 class="text-lg font-bold mb-4 text-gray-800">Update Status</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <div class="col-span-1 md:col-span-4">
+                            <select name="status" class="form-select w-full px-4 py-2 border border-gray-300 rounded-md">
+                                {% for status_value, status_name in article.STATUS_CHOICES %}
+                                <option value="{{ status_value }}" {% if article.status == status_value %}selected{% endif %}>
+                                    {{ status_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-span-1">
+                            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md font-medium">
+                                Update
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Referee Assignment -->
+                <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                    <h2 class="text-lg font-bold mb-4 text-gray-800">Assign Referees</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {% for referee in referees %}
+                        <div class="flex items-center">
+                            <input type="checkbox" id="referee-{{ referee.id }}" name="referees" value="{{ referee.id }}" 
+                                {% if referee in assigned_referees %}checked{% endif %}
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            <label for="referee-{{ referee.id }}" class="ml-2 block text-sm text-gray-800">
+                                {{ referee.user.username }} ({{ referee.user.email }})
+                            </label>
+                        </div>
+                        {% empty %}
+                        <div class="col-span-3">
+                            <p class="text-gray-500 italic">No referees available. Please add referees in the admin panel.</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-4">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md font-medium">
+                            Save Assignments
+                        </button>
+                    </div>
+                </div>
+            </form>
+            
+            <!-- Referee Feedback -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <h2 class="text-lg font-bold mb-4 text-gray-800">Referee Feedback</h2>
+                {% for feedback in article.articlefeedback_set.all %}
+                <div class="bg-white p-4 rounded-lg mb-4 shadow-sm">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-md font-bold text-gray-800">
+                            {{ feedback.referee.user.username }}
+                        </h3>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            {% if feedback.recommendation == 'accept' %}bg-green-100 text-green-800
+                            {% elif feedback.recommendation == 'revise' %}bg-yellow-100 text-yellow-800
+                            {% elif feedback.recommendation == 'reject' %}bg-red-100 text-red-800{% endif %}">
+                            {{ feedback.get_recommendation_display }}
+                        </span>
+                    </div>
+                    <div class="text-gray-600 whitespace-pre-line">{{ feedback.comments }}</div>
+                    <div class="text-xs text-gray-500 mt-2 text-right">
+                        Submitted on {{ feedback.created_at|date:"F j, Y" }}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-gray-500 italic">No feedback has been submitted yet.</p>
+                {% endfor %}
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex justify-between">
+                <a href="{% url 'editor_chat' article.id %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-medium">
+                    <i class="fas fa-comments mr-2"></i> Chat with Author
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

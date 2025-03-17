@@ -1,0 +1,64 @@
+{% extends 'articles/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-8">
+            <h1 class="text-3xl font-bold mb-6 text-gray-800">Track Your Article</h1>
+            <p class="text-gray-600 mb-6">Enter your tracking code and email address to check the status of your submission.</p>
+            
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+                {{ form|crispy }}
+                
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-md font-medium">
+                    Track Article
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    {% if article %}
+    <div class="mt-8 bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-8">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Article Information</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div>
+                    <p class="text-sm text-gray-500">Tracking Code</p>
+                    <p class="font-medium text-gray-800">{{ article.tracking_code }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500">Submission Date</p>
+                    <p class="font-medium text-gray-800">{{ article.submission_date|date:"F j, Y" }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500">Last Updated</p>
+                    <p class="font-medium text-gray-800">{{ article.last_updated|date:"F j, Y" }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500">Status</p>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                        {% if article.status == 'submitted' %}bg-blue-100 text-blue-800
+                        {% elif article.status == 'under_review' %}bg-yellow-100 text-yellow-800
+                        {% elif article.status == 'revision_required' %}bg-orange-100 text-orange-800
+                        {% elif article.status == 'accepted' %}bg-green-100 text-green-800
+                        {% elif article.status == 'rejected' %}bg-red-100 text-red-800{% endif %}">
+                        {{ article.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                <a href="{% url 'article_chat' article.tracking_code %}?email={{ article.email }}" class="inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md font-medium">
+                    <i class="fas fa-comments mr-2"></i> Chat with Editor
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends 'articles/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-8">
+            <h1 class="text-3xl font-bold mb-6 text-gray-800">Submit Your Article</h1>
+            <p class="text-gray-600 mb-6">Please upload your article as a PDF file. You will receive a tracking code via email to monitor your submission status.</p>
+            
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                {% csrf_token %}
+                {{ form|crispy }}
+
+                
+                <div class="flex items-center">
+                    <input type="checkbox" id="terms" name="terms" class="mr-2 h-4 w-4" required>
+                    <label for="terms" class="text-sm text-gray-600">I agree to the terms and conditions of submission</label>
+                </div>
+                
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-md font-medium">
+                    Upload Article
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="mt-8 bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-500"></i>
+            </div>
+            <div class="ml-3">
+                <p class="text-sm text-blue-700">
+                    Acceptable file format: PDF only. Maximum file size: 10MB.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <h1 class="text-3xl font-bold mb-6 text-gray-800">Referee Dashboard</h1>
+            
+            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-indigo-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-indigo-700">
+                            Welcome, Referee. Here you can assess all article issued for you.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <h4 class="text-sm font-medium text-blue-800 mb-1">Submitted</h4>
+                    <p class="text-2xl font-bold text-blue-600">{{ articles.submitted.count }}</p>
+                </div>
+                <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                    <h4 class="text-sm font-medium text-yellow-800 mb-1">Under Review</h4>
+                    <p class="text-2xl font-bold text-yellow-600">{{ articles.under_review.count }}</p>
+                </div>
+                <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                    <h4 class="text-sm font-medium text-orange-800 mb-1">Revision Required</h4>
+                    <p class="text-2xl font-bold text-orange-600">{{ articles.revision_required.count }}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+                    <h4 class="text-sm font-medium text-green-800 mb-1">Accepted</h4>
+                    <p class="text-2xl font-bold text-green-600">{{ articles.accepted.count }}</p>
+                </div>
+            </div>
+            
+            <!-- Article List -->
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="py-3 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">
+                                Tracking Code
+                            </th>
+                            <th class="py-3 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">
+                                Submitted
+                            </th>
+                            <th class="py-3 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">
+                                Status
+                            </th>
+                            <th class="py-3 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for article in articles %}
+                        <tr>
+                            <td class="py-4 px-4 whitespace-nowrap">
+                                <div class="font-medium text-gray-900">{{ article.tracking_code }}</div>
+                                <div class="text-sm text-gray-500">{{ article.email }}</div>
+                            </td>
+                            <td class="py-4 px-4 whitespace-nowrap">
+                                <div class="text-sm text-gray-900">{{ article.submission_date|date:"M d, Y" }}</div>
+                                <div class="text-sm text-gray-500">{{ article.submission_date|time:"H:i" }}</div>
+                            </td>
+                            <td class="py-4 px-4 whitespace-nowrap">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if article.status == 'submitted' %}bg-blue-100 text-blue-800
+                                    {% elif article.status == 'under_review' %}bg-yellow-100 text-yellow-800
+                                    {% elif article.status == 'revision_required' %}bg-orange-100 text-orange-800
+                                    {% elif article.status == 'accepted' %}bg-green-100 text-green-800
+                                    {% elif article.status == 'rejected' %}bg-red-100 text-red-800{% endif %}">
+                                    {{ article.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-4 whitespace-nowrap text-sm font-medium">
+                                <div class="flex space-x-2">
+                                    <a href="{% url 'referee_review' article.id %}" class="text-green-600 hover:text-green-900">
+                                        <i class="fas fa-book"></i>
+                                    </a>
+                                    <a href="{% url 'download_article' article.id %}" class="text-gray-600 hover:text-gray-900">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="py-4 px-4 text-center text-gray-500">
+                                No articles found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

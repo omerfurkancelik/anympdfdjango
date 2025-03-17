@@ -1,0 +1,58 @@
+{# articles/referee/review.html #}
+{% extends "articles/base.html" %}
+{% load static crispy_forms_tags %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto my-8">
+  <!-- Display success/error messages if any -->
+
+
+  <div class="bg-white rounded-lg shadow-card overflow-hidden">
+    <div class="bg-gradient-to-r from-indigo-500 to-blue-500 h-2"></div>
+    <div class="p-6">
+      <h1 class="text-2xl font-bold mb-4 text-gray-800">Review Article</h1>
+
+      <!-- Article overview -->
+      <div class="mb-6">
+        <p class="text-gray-700"><span class="font-semibold">Title:</span> {{ article.title }}</p>
+        <p class="text-gray-700"><span class="font-semibold">Tracking Code:</span> {{ article.tracking_code }}</p>
+        <p class="text-gray-700"><span class="font-semibold">Status:</span> {{ article.get_status_display }}</p>
+        <p class="text-gray-700"><span class="font-semibold">Submitted by:</span> {{ article.email }}</p>
+        
+        <!-- If a file is available, show a download link -->
+        {% if article.file %}
+          <a href="{{ article.file.url }}" class="inline-block mt-2 underline text-indigo-600">
+            Download Article File
+          </a>
+        {% endif %}
+      </div>
+
+      <!-- Feedback form -->
+      <form method="POST" class="space-y-4">
+        {% csrf_token %}
+        {{ form|crispy }}
+
+        <button
+          type="submit"
+          class="bg-blue-600 text-white font-semibold py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+        >
+          Submit Feedback
+        </button>
+      </form>
+
+      <!-- If previously submitted feedback exists, you could display a summary here. -->
+      {% if feedback %}
+      <div class="mt-6 bg-gray-50 p-4 rounded border">
+        <h2 class="font-semibold text-gray-700 mb-2">Your Previous Feedback</h2>
+        <p class="text-gray-700 mb-1">
+          <span class="font-semibold">Comments:</span> {{ feedback.comments }}
+        </p>
+        <p class="text-gray-700">
+          <span class="font-semibold">Recommendation:</span> {{ feedback.get_recommendation_display }}
+        </p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
