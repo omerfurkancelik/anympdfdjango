@@ -14,7 +14,7 @@
                     </div>
                     <div class="ml-3">
                         <p class="text-sm text-indigo-700">
-                            Welcome, Referee. Here you can assess all article issued for you.
+                            Welcome, Referee. Here you can assess all articles assigned to you.
                         </p>
                     </div>
                 </div>
@@ -60,7 +60,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
-                        {% for article in articles %}
+                        {% for article in all_articles %}
                         <tr>
                             <td class="py-4 px-4 whitespace-nowrap">
                                 <div class="font-medium text-gray-900">{{ article.tracking_code }}</div>

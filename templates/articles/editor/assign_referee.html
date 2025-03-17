@@ -1,0 +1,55 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <h1 class="text-2xl font-bold mb-6 text-gray-800">Assign Referee for {{ article.tracking_code }}</h1>
+            
+            <form method="post" action="{% url 'assign_referee' article.id %}">
+                {% csrf_token %}
+                
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-3 text-gray-700">Article Details</h2>
+                    <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                        <p class="text-sm text-gray-700"><strong>Submitted by:</strong> {{ article.email }}</p>
+                        <p class="text-sm text-gray-700"><strong>Date:</strong> {{ article.submission_date|date:"M d, Y" }}</p>
+                        <p class="text-sm text-gray-700"><strong>Current Status:</strong> {{ article.get_status_display }}</p>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold mb-3 text-gray-700">Select Referee</h2>
+                    <p class="text-sm text-gray-600 mb-4">Please select one referee to review this article</p>
+                    
+                    <div class="space-y-2">
+                        {% for referee in referees %}
+                        <div class="flex items-center">
+                            <input type="radio" id="referee-{{ referee.id }}" name="referee" value="{{ referee.id }}" 
+                                {% if article.referee.id == referee.id %}checked{% endif %}
+                                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                            <label for="referee-{{ referee.id }}" class="ml-2 block text-sm text-gray-700">
+                                {{ referee.user.username }}
+                                {% if referee.user.email %}<span class="text-gray-500">({{ referee.user.email }})</span>{% endif %}
+                            </label>
+                        </div>
+                        {% empty %}
+                        <p class="text-sm text-gray-500">No referees available.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="flex justify-end">
+                    <a href="{% url 'editor_dashboard' %}" class="mr-3 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Cancel
+                    </a>
+                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Assign Referee
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -11,7 +11,6 @@ class Article(models.Model):
         ('rejected', 'Rejected'),
     )
     
-    
     title = models.CharField(max_length=255, null=True, blank=True)
     tracking_code = models.CharField(max_length=20, unique=True, editable=False)
     email = models.EmailField()
@@ -19,6 +18,7 @@ class Article(models.Model):
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='submitted')
     submission_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
+    referee = models.ForeignKey('Referee', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_articles')
     
     def save(self, *args, **kwargs):
         if not self.tracking_code:
@@ -43,7 +43,6 @@ class Editor(models.Model):
     
 class Referee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    articles = models.ManyToManyField(Article, blank=True, related_name='referees')
     
     def __str__(self):
         return self.user.username

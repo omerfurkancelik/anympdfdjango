@@ -103,66 +103,65 @@ def editor_dashboard(request):
     return render(request, 'articles/editor/dashboard.html', {'articles': articles})
 
 
+def assign_referee(request, article_id):
+    
+    article = get_object_or_404(Article, id=article_id)
+    referees = Referee.objects.all()
+    
+    if request.method == 'POST':
+        referee_id = request.POST.get('referee')
+        if referee_id:
+            referee = get_object_or_404(Referee, id=referee_id)
+            article.referee = referee
+            article.status = 'under_review'
+            article.save()
+            
+            # Optional: Send notification to the referee
+            # send_referee_notification(referee, article)
+            
+            messages.success(request, f"Article {article.tracking_code} has been assigned to {referee.user.username}")
+            return redirect('editor_dashboard')
+        else:
+            messages.error(request, "Please select a referee")
+    
+    return render(request, 'articles/editor/assign_referee.html', {
+        'article': article,
+        'referees': referees
+    })
+
+
 
 
 def editor_review(request, article_id):
+    
     article = get_object_or_404(Article, id=article_id)
-    referees = Referee.objects.all()
-    assigned_referees = article.referees.all()
+    all_referees = Referee.objects.all()
+    
+    # Get the currently assigned referee (if any)
+    assigned_referee = article.referee
+    
+    # Get feedback for this article
+    feedback = ArticleFeedback.objects.filter(article=article)
     
     if request.method == 'POST':
-        status = request.POST.get('status')
-        referee_ids = request.POST.getlist('referees')
+        action = request.POST.get('action')
         
-        if status:
-            article.status = status
-            article.save()
-            
-            # Send email notification to the author about status change
-            subject = f'Article Status Update: {article.tracking_code}'
-            message = f"""
-            Dear Author,
-            
-            Your article with tracking code {article.tracking_code} has been updated to status: {article.get_status_display()}.
-            
-            You can track your article at {request.build_absolute_uri(reverse('track_article'))}
-            
-            Best regards,
-            The Editorial Team
-            """
-            #send_mail(subject, message, settings.EMAIL_HOST_USER, [article.email])
-            
-            messages.success(request, f'Article status updated to {article.get_status_display()}')
+        if action == 'update_status':
+            new_status = request.POST.get('status')
+            if new_status in [status[0] for status in Article.STATUS_CHOICES]:
+                article.status = new_status
+                article.save()
+                messages.success(request, f"Article status updated to {article.get_status_display()}")
+                return redirect('editor_review', article_id=article.id)
         
-        # Update assigned referees
-        article.referees.clear()
-        for referee_id in referee_ids:
-            referee = Referee.objects.get(id=referee_id)
-            article.referees.add(referee)
-            
-            # Send email notification to newly assigned referees
-            subject = f'New Article Review Assignment: {article.tracking_code}'
-            message = f"""
-            Dear Referee,
-            
-            You have been assigned to review an article with tracking code {article.tracking_code}.
-            
-            Please log in to the review system to access the article.
-            
-            Best regards,
-            The Editorial Team
-            """
-            #send_mail(subject, message, settings.EMAIL_HOST_USER, [referee.user.email])
-            
-        messages.success(request, 'Referee assignments updated')
-        return redirect('editor_review', article_id=article.id)
-    
+        # The referee assignment is now handled in the assign_referee view
+        
     return render(request, 'articles/editor/review.html', {
         'article': article,
-        'referees': referees,
-        'assigned_referees': assigned_referees
+        'all_referees': all_referees,
+        'assigned_referee': assigned_referee,
+        'feedback': feedback
     })
-
 
 def editor_chat(request, article_id):
     article = get_object_or_404(Article, id=article_id)
@@ -203,7 +202,10 @@ def editor_chat(request, article_id):
 # Referee section views
 def referee_dashboard(request):
     referee = User.objects.get(email="ref1@test.com").referee
-    articles = referee.articles.all()
+    
+    # Instead of referee.articles.all(), use the related_name from Article model
+    articles = Article.objects.filter(referee=referee)
+    
     if request.method == 'POST':
         article_id = request.POST.get('article_id')
         article = get_object_or_404(Article, pk=article_id)
@@ -217,12 +219,27 @@ def referee_dashboard(request):
     else:
         form = ArticleFeedbackForm()
 
-    context = {'referee': referee, 'form': form,'articles':articles}
+    # Group articles by status for the dashboard stats
+    articles_by_status = {
+        'submitted': articles.filter(status='submitted'),
+        'under_review': articles.filter(status='under_review'),
+        'revision_required': articles.filter(status='revision_required'),
+        'accepted': articles.filter(status='accepted')
+    }
+
+    context = {
+        'referee': referee, 
+        'form': form,
+        'articles': articles_by_status,
+        'all_articles': articles  # Add the full queryset for the table
+    }
     return render(request, 'articles/referee/dashboard.html', context)
 
 def referee_review(request, article_id):
     referee = User.objects.get(email="ref1@test.com").referee
-    article = get_object_or_404(Article, id=article_id, referees=referee)
+    
+    # Instead of filtering with referees=referee, filter with referee=referee
+    article = get_object_or_404(Article, id=article_id, referee=referee)
     
     try:
         feedback = ArticleFeedback.objects.get(article=article, referee=referee)
@@ -238,6 +255,7 @@ def referee_review(request, article_id):
             feedback.save()
             
             # Notify editor about new feedback
+            # Since editors is a ManyToMany field, we don't need to change this part
             editors = article.editors.all()
             for editor in editors:
                 subject = f'New Referee Feedback on Article: {article.tracking_code}'
@@ -257,10 +275,8 @@ def referee_review(request, article_id):
             return redirect('referee_dashboard')
     else:
         form = ArticleFeedbackForm(instance=feedback)
-        
-
     
-    return render(request, 'articles/referee/feedback.html', {
+    return render(request, 'articles/referee/review.html', {
         'article': article,
         'form': form,
         'feedback': feedback

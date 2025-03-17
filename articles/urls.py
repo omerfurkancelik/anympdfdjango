@@ -22,4 +22,5 @@ urlpatterns = [
     
     # File download
     path('download/<int:article_id>/', views.download_article, name='download_article'),
+    path('editor/article/<int:article_id>/assign/', views.assign_referee, name='assign_referee'),
 ]
