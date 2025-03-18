@@ -64,7 +64,7 @@
             </div>
             
             <!-- Message Form -->
-            <form method="post" class="space-y-4">
+            <form method="post" class="space-y-4" autocomplete="false">
                 {% csrf_token %}
                 {{ form|crispy }}
                 

@@ -7,7 +7,7 @@
         <div class="p-6">
             <h1 class="text-2xl font-bold mb-6 text-gray-800">Assign Referee for {{ article.tracking_code }}</h1>
             
-            <form method="post" action="{% url 'assign_referee' article.id %}">
+            <form method="post" action="{% url 'assign_referee' article.id %}" autocomplete="false">
                 {% csrf_token %}
                 
                 <div class="mb-6">

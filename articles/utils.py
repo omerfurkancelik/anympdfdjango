@@ -7,6 +7,12 @@ import spacy
 from django.conf import settings
 from django.core.files.base import ContentFile
 import logging
+import fitz  # PyMuPDF
+import io
+from PIL import Image, ImageDraw, ImageFilter
+import tempfile
+import numpy as np
+import cv2
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -68,7 +74,7 @@ def extract_authors(text):
     
     # If no authors found by patterns, use spaCy for named entity recognition
     if not authors:
-        doc = nlp(text[:5000])  # Process first 5000 chars for efficiency
+        doc = nlp()  # Process first 5000 chars for efficiency
         for ent in doc.ents:
             if ent.label_ == "PERSON":
                 authors.append(ent.text)
@@ -81,6 +87,9 @@ def extract_authors(text):
         clean_author = re.sub(r'\s+', ' ', clean_author).strip()
         if clean_author and len(clean_author.split()) <= 4:  # Names typically have at most 4 parts
             cleaned_authors.append(clean_author)
+            
+            
+    print("Temiz Yazarlar : " + cleaned_authors)
     
     return list(set(cleaned_authors))  # Remove duplicates
 
@@ -114,7 +123,7 @@ def extract_institutions(text):
     
     # If no institutions found by patterns, use spaCy for named entity recognition
     if not institutions:
-        doc = nlp(text[:10000])  # Process first 10000 chars for efficiency
+        doc = nlp(text)  # Process first 10000 chars for efficiency
         for ent in doc.ents:
             if ent.label_ == "ORG":
                 # Check if the organization matches institutional indicators
@@ -200,56 +209,71 @@ def extract_keywords(text, min_keywords=3, max_keywords=10):
 
 def anonymize_pdf(pdf_path, anonymize_map):
     """
-    Create an anonymized version of the PDF
-    This is a simplified approach using PyPDF2 to replace text
-    For production, consider using more robust PDF processing libraries
+    Create an anonymized version of the PDF with proper text replacement
+    and image blurring for author photos using face detection
+    
+    This preserves the original PDF structure and only anonymizes the relevant content
     """
     try:
-        # Read the original PDF
-        with open(pdf_path, 'rb') as file:
-            reader = PyPDF2.PdfReader(file)
-            writer = PyPDF2.PdfWriter()
+        # Create a temporary file for the anonymized PDF
+        temp_fd, temp_path = tempfile.mkstemp(suffix='.pdf')
+        os.close(temp_fd)
+        
+        # Open the PDF
+        doc = fitz.open(pdf_path)
+        
+        # Process each page
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
             
-            # Process each page
-            for page_num in range(len(reader.pages)):
-                page = reader.pages[page_num]
-                text = page.extract_text()
-                
-                # Replace each item in the anonymization map
-                for original, replacement in anonymize_map.items():
-                    # Use regex with word boundaries to avoid partial replacements
-                    pattern = r'\b' + re.escape(original) + r'\b'
-                    text = re.sub(pattern, replacement, text)
-                
-                # Create a new page with the modified text
-                # This is simplified - in production you'd need a more advanced approach
-                # to maintain formatting, images, etc.
-                # Here we're just demonstrating the concept
-                from reportlab.pdfgen import canvas
-                from reportlab.lib.pagesizes import letter
-                from io import BytesIO
-                
-                packet = BytesIO()
-                can = canvas.Canvas(packet, pagesize=letter)
-                can.drawString(100, 100, "Anonymized document")
-                can.drawString(100, 80, text[:100] + "...")  # Display part of the text
-                can.save()
-                
-                packet.seek(0)
-                new_pdf = PyPDF2.PdfReader(packet)
-                writer.add_page(new_pdf.pages[0])
+            # 1. Handle text replacement - particularly for author names and institutions
+            for original, replacement in anonymize_map.items():
+                # Search for text instances and replace them
+                text_instances = page.search_for(original)
+                for inst in text_instances:
+                    # Create a redaction annotation for this text
+                    annot = page.add_redact_annot(inst, text=replacement)
+                    # Apply the redactions
+                    page.apply_redactions()
             
-            # Save the anonymized PDF to a temporary file
-            temp_path = os.path.join(os.path.dirname(pdf_path), f"anonymized_{os.path.basename(pdf_path)}")
-            with open(temp_path, 'wb') as output_file:
-                writer.write(output_file)
+            # 2. Handle images - detect and blur faces in images
+            # Extract images from the page
+            image_list = page.get_images(full=True)
+            
+            for img_idx, img_info in enumerate(image_list):
+                xref = img_info[0]  # xref number
                 
-            return temp_path
+                # Try to get the image
+                try:
+                    base_img = doc.extract_image(xref)
+                    img_bytes = base_img["image"]
+                    img_ext = base_img["ext"]
+                    
+                    # Detect faces in the image
+                    faces = detect_faces(img_bytes)
+                    
+                    # If faces are found, blur them
+                    if faces:
+                        logger.info(f"Found {len(faces)} faces in image on page {page_idx+1}")
+                        blurred_img_bytes = blur_faces(img_bytes, faces)
+                        
+                        # Replace the image in the document
+                        doc.delete_image(xref)  # Remove old image
+                        rect = fitz.Rect(img_info[1:5])  # Get the rectangle where the image is
+                        page.insert_image(rect, stream=blurred_img_bytes)  # Insert blurred image
+                except Exception as e:
+                    logger.error(f"Error processing image {img_idx} on page {page_idx}: {e}")
+                    continue
+        
+        # Save the anonymized PDF
+        doc.save(temp_path)
+        doc.close()
+        
+        return temp_path
     
     except Exception as e:
         logger.error(f"Error anonymizing PDF: {e}")
         return None
-
 def create_anonymization_map(authors, institutions):
     """
     Create a mapping of original text to anonymized replacements
@@ -266,6 +290,100 @@ def create_anonymization_map(authors, institutions):
         anon_map[institution] = f"Institution-{idx+1}"
     
     return anon_map
+
+
+
+
+def detect_faces(image_bytes):
+    """
+    Detect faces in an image using OpenCV
+    
+    Args:
+        image_bytes: Binary image data
+        
+    Returns:
+        List of face rectangles (x, y, width, height)
+    """
+    try:
+        # Convert image bytes to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Load the pre-trained face detector model
+        # Using Haar cascades for simplicity and speed
+        face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(face_cascade_path)
+        
+        # Convert to grayscale for face detection
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Detect faces
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(30, 30),
+            flags=cv2.CASCADE_SCALE_IMAGE
+        )
+        
+        return faces
+    except Exception as e:
+        logger.error(f"Error detecting faces: {e}")
+        return []
+
+def blur_faces(image_bytes, faces):
+    """
+    Blur detected faces in an image
+    
+    Args:
+        image_bytes: Binary image data
+        faces: List of face rectangles from detect_faces
+        
+    Returns:
+        Binary data of image with blurred faces
+    """
+    try:
+        # Convert to PIL image for processing
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # If we found faces, blur each one
+        if len(faces) > 0:
+            # Convert to numpy for OpenCV processing
+            img_np = np.array(img)
+            
+            # Convert RGB to BGR for OpenCV
+            if len(img_np.shape) == 3 and img_np.shape[2] == 3:
+                img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            
+            # For each face, apply a heavy blur
+            for (x, y, w, h) in faces:
+                # Apply a stronger blur to ensure anonymity
+                # Get the face region
+                face_region = img_np[y:y+h, x:x+w]
+                
+                # Apply a strong blur
+                blurred_face = cv2.GaussianBlur(face_region, (99, 99), 30)
+                
+                # Replace the region with the blurred version
+                img_np[y:y+h, x:x+w] = blurred_face
+            
+            # Convert back to RGB for PIL
+            if len(img_np.shape) == 3 and img_np.shape[2] == 3:
+                img_np = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
+            
+            # Convert back to PIL Image
+            img = Image.fromarray(img_np)
+        
+        # Convert back to bytes
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, format=img.format or "PNG")
+        output_buffer.seek(0)
+        
+        return output_buffer.getvalue()
+    except Exception as e:
+        logger.error(f"Error blurring faces: {e}")
+        return image_bytes  # Return original if processing fails
+
 
 def match_referees_by_keywords(article_keywords, referees):
     """

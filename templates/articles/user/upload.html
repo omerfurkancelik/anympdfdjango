@@ -9,7 +9,7 @@
             <h1 class="text-3xl font-bold mb-6 text-gray-800">Submit Your Article</h1>
             <p class="text-gray-600 mb-6">Please upload your article as a PDF file. You will receive a tracking code via email to monitor your submission status.</p>
             
-            <form method="post" enctype="multipart/form-data" class="space-y-6">
+            <form method="post" enctype="multipart/form-data" class="space-y-6" autocomplete="false">
                 {% csrf_token %}
                 {{ form|crispy }}
 

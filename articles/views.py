@@ -43,7 +43,7 @@ def upload_article(request):
             Best regards,
             The Editorial Team
             """
-            send_mail(subject, message, settings.EMAIL_HOST_USER, [article.email])
+            #send_mail(subject, message, settings.EMAIL_HOST_USER, [article.email])
             
             messages.success(request, f'Your article has been successfully uploaded. A tracking code has been sent to {article.email}')
             return redirect('upload_success', tracking_code=article.tracking_code)

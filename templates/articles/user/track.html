@@ -9,7 +9,7 @@
             <h1 class="text-3xl font-bold mb-6 text-gray-800">Track Your Article</h1>
             <p class="text-gray-600 mb-6">Enter your tracking code and email address to check the status of your submission.</p>
             
-            <form method="post" class="space-y-6">
+            <form method="post" class="space-y-6" autocomplete="false">
                 {% csrf_token %}
                 {{ form|crispy }}
                 

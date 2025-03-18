@@ -128,7 +128,7 @@
                             <h2 class="text-lg font-semibold text-gray-800">Update Status</h2>
                         </div>
                         <div class="p-6">
-                            <form method="post" action="{% url 'editor_review' article.id %}">
+                            <form method="post" action="{% url 'editor_review' article.id %}" autocomplete="false">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="update_status">
                                 
