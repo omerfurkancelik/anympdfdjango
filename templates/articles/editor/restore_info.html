@@ -1,0 +1,125 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Restore Article Information</h1>
+                <a href="{% url 'referee_review' article_id=article.id referee_id=article.referee.id %}" class="text-indigo-600 hover:text-indigo-900">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Review
+                </a>
+            </div>
+            
+            <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-green-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-green-700">
+                            This page shows the original author and institution information that was anonymized in the article.
+                            Use this information when communicating the review results to the author.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Article Information -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-2">Article Details</h2>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Tracking Code</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ article.tracking_code }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Author Email</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ article.email }}</dd>
+                    </div>
+                    {% if article.title %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Title</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ article.title }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+            
+            <!-- Anonymization Mapping -->
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Anonymized Information</h2>
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="px-4 py-5 sm:px-6 bg-gray-50">
+                        <h3 class="text-lg font-medium leading-6 text-gray-900">Author Information</h3>
+                    </div>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Anonymized
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Original
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for anon, original in reverse_map.items %}
+                            {% if 'Author' in anon %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ anon }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ original }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="px-4 py-5 sm:px-6 bg-gray-50">
+                        <h3 class="text-lg font-medium leading-6 text-gray-900">Institution Information</h3>
+                    </div>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Anonymized
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Original
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for anon, original in reverse_map.items %}
+                            {% if 'Institution' in anon %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ anon }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ original }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Download Files -->
+            <div class="mt-8 flex space-x-4 justify-center">
+                <a href="{% url 'download_article' article.id %}" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-download mr-2"></i> Download Original
+                </a>
+                <a href="{% url 'download_anonymized_article' article.id %}" class="inline-flex items-center px-4 py-2 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-user-secret mr-2"></i> Download Anonymized
+                </a>
+            </div>
+            
+        </div>
+    </div>
+</div>
+{% endblock %}

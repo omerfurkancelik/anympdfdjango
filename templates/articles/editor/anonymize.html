@@ -1,0 +1,119 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Anonymize Article</h1>
+                <a href="{% url 'editor_review' article.id %}" class="text-indigo-600 hover:text-indigo-900">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Article
+                </a>
+            </div>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-yellow-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            Select the information you want to anonymize in the article. Selected items will be replaced with generic identifiers like "Author-1" and "Institution-1" in the anonymized version.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Article Information -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-2">Article Details</h2>
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Tracking Code</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ article.tracking_code }}</dd>
+                    </div>
+                    <div class="sm:col-span-1">
+                        <dt class="text-sm font-medium text-gray-500">Submission Date</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ article.submission_date|date:"M d, Y" }}</dd>
+                    </div>
+                    {% if article.title %}
+                    <div class="sm:col-span-2">
+                        <dt class="text-sm font-medium text-gray-500">Title</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ article.title }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+            
+            <!-- Select information to anonymize -->
+            <form method="post" class="mt-6">
+                {% csrf_token %}
+                
+                <div class="mb-8">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Authors</h3>
+                    
+                    {% if authors %}
+                    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <ul class="divide-y divide-gray-200">
+                            {% for author in authors %}
+                            <li class="p-4">
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="author-{{ forloop.counter }}" name="authors" value="{{ author }}" type="checkbox" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                    </div>
+                                    <div class="ml-3 text-sm">
+                                        <label for="author-{{ forloop.counter }}" class="font-medium text-gray-700">{{ author }}</label>
+                                        <p class="text-gray-500">Will be replaced with "Author-{{ forloop.counter }}"</p>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="bg-white rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+                        No authors extracted. <a href="{% url 'process_article_metadata' article.id %}" class="text-indigo-600 hover:text-indigo-900">Process article metadata</a> first.
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-8">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Institutions</h3>
+                    
+                    {% if institutions %}
+                    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <ul class="divide-y divide-gray-200">
+                            {% for institution in institutions %}
+                            <li class="p-4">
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="institution-{{ forloop.counter }}" name="institutions" value="{{ institution }}" type="checkbox" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                    </div>
+                                    <div class="ml-3 text-sm">
+                                        <label for="institution-{{ forloop.counter }}" class="font-medium text-gray-700">{{ institution }}</label>
+                                        <p class="text-gray-500">Will be replaced with "Institution-{{ forloop.counter }}"</p>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="bg-white rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+                        No institutions extracted. <a href="{% url 'process_article_metadata' article.id %}" class="text-indigo-600 hover:text-indigo-900">Process article metadata</a> first.
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="flex justify-center">
+                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-user-secret mr-2"></i> Create Anonymized Version
+                    </button>
+                </div>
+            </form>
+            
+        </div>
+    </div>
+</div>
+{% endblock %}

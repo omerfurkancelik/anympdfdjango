@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-import uuid
+import uuid,json
 
 class Article(models.Model):
     STATUS_CHOICES = (
@@ -15,10 +15,18 @@ class Article(models.Model):
     tracking_code = models.CharField(max_length=20, unique=True, editable=False)
     email = models.EmailField()
     file = models.FileField(upload_to='articles/')
+    anonymized_file = models.FileField(upload_to='anonymized_articles/', null=True, blank=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='submitted')
     submission_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
     referee = models.ForeignKey('Referee', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_articles')
+    
+    # New fields for extracted metadata
+    extracted_authors = models.TextField(blank=True, null=True, help_text="Automatically extracted author names")
+    extracted_institutions = models.TextField(blank=True, null=True, help_text="Automatically extracted institutions")
+    extracted_keywords = models.TextField(blank=True, null=True, help_text="Automatically extracted keywords")
+    anonymization_map = models.TextField(blank=True, null=True, help_text="JSON mapping of original text to anonymized text")
+    is_anonymized = models.BooleanField(default=False, help_text="Whether the article has been anonymized")
     
     def save(self, *args, **kwargs):
         if not self.tracking_code:
@@ -28,6 +36,34 @@ class Article(models.Model):
     def generate_tracking_code(self):
         code = str(uuid.uuid4()).upper()[:8]
         return f"ART-{code}"
+    
+    def get_extracted_authors_list(self):
+        """Return extracted authors as a list"""
+        if self.extracted_authors:
+            return self.extracted_authors.split('|')
+        return []
+    
+    def get_extracted_institutions_list(self):
+        """Return extracted institutions as a list"""
+        if self.extracted_institutions:
+            return self.extracted_institutions.split('|')
+        return []
+    
+    def get_extracted_keywords_list(self):
+        """Return extracted keywords as a list"""
+        if self.extracted_keywords:
+            return self.extracted_keywords.split('|')
+        return []
+    
+    def get_anonymization_map(self):
+        """Return anonymization map as a dictionary"""
+        if self.anonymization_map:
+            return json.loads(self.anonymization_map)
+        return {}
+    
+    def set_anonymization_map(self, mapping):
+        """Set anonymization map from a dictionary"""
+        self.anonymization_map = json.dumps(mapping)
     
     def __str__(self):
         return f"{self.tracking_code} - {self.email}"

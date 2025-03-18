@@ -1,0 +1,88 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Suggested Referees</h1>
+                <a href="{% url 'editor_review' article.id %}" class="text-indigo-600 hover:text-indigo-900">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Article
+                </a>
+            </div>
+            
+            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-indigo-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-indigo-700">
+                            Based on the keywords extracted from this article, here are the most suitable referees for review. 
+                            Higher match percentage indicates greater relevance to the article's subject matter.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Article Keywords -->
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-2">Article Keywords</h2>
+                <div class="flex flex-wrap gap-2">
+                    {% for keyword in keywords %}
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                        {{ keyword }}
+                    </span>
+                    {% empty %}
+                    <p class="text-gray-500">No keywords available</p>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Referee Suggestions -->
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Referee Suggestions</h2>
+                
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <ul class="divide-y divide-gray-200">
+                        {% for referee, score in matched_referees %}
+                        <li class="p-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="text-lg font-medium text-gray-900">{{ referee.user.username }}</h3>
+                                    <p class="text-sm text-gray-500">{{ referee.user.email }}</p>
+                                    {% if referee.specialization %}
+                                    <div class="mt-1">
+                                        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                            {{ referee.specialization }}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="flex flex-col items-end">
+                                    <div class="flex items-center mb-2">
+                                        <div class="w-24 bg-gray-200 rounded-full h-2.5 mr-2">
+                                            <div class="bg-blue-600 h-2.5 rounded-full" style="width: {{ score|floatformat:0 }}%"></div>
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-700">{{ score|floatformat:0 }}%</span>
+                                    </div>
+                                    <a href="{% url 'assign_referee' article.id %}?referee={{ referee.id }}" class="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                        Assign
+                                    </a>
+                                </div>
+                            </div>
+                        </li>
+                        {% empty %}
+                        <li class="p-4 text-center text-gray-500">
+                            No referees available
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+</div>
+{% endblock %}

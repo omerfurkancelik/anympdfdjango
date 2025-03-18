@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+import os
 
 urlpatterns = [
     # General
@@ -17,6 +18,10 @@ urlpatterns = [
     path('editor/chat/<int:article_id>/', views.editor_chat, name='editor_chat'),
     path('editor/article/<int:article_id>/assign/', views.assign_referee, name='assign_referee'),
     path('editor/article/<int:article_id>/delete/', views.delete_article, name='delete_article'),
+    path('editor/article/<int:article_id>/metadata/', views.process_article_metadata, name='process_article_metadata'),
+    path('editor/article/<int:article_id>/anonymize/', views.anonymize_article, name='anonymize_article'),
+    path('editor/article/<int:article_id>/download-anonymized/', views.download_anonymized_article, name='download_anonymized_article'),
+    path('editor/article/<int:article_id>/suggest-referees/', views.suggest_referees, name='suggest_referees'),
     
     # Referee section
     path('referees/', views.referee_list, name='referee_list'),
@@ -24,6 +29,8 @@ urlpatterns = [
     path('referee/<int:referee_id>/review/<int:article_id>/', views.referee_review, name='referee_review'),
     path('referee/dashboard/', views.referee_dashboard, name='referee_dashboard_default'),
     path('referees/add/', views.add_referee, name='add_referee'),
+    path('referee/article/<int:article_id>/restore-info/', views.restore_article_info, name='restore_article_info'),
+
 
     
 
@@ -32,3 +39,5 @@ urlpatterns = [
     path('download/<int:article_id>/', views.download_article, name='download_article'),
     
 ]
+
+

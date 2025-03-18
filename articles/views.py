@@ -380,3 +380,221 @@ def delete_article(request, article_id):
         return redirect('editor_dashboard')
     
     return render(request, 'articles/editor/delete_confirm.html', {'article': article})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+from .utils import (extract_text_from_pdf, extract_authors, extract_institutions, 
+                   extract_keywords, create_anonymization_map, anonymize_pdf,
+                   match_referees_by_keywords)
+from django.core.files.base import ContentFile
+import os
+import json
+
+def process_article_metadata(request, article_id):
+    """Extract metadata from an article using NLP"""
+
+    article = get_object_or_404(Article, id=article_id)
+    
+    if request.method == 'POST':
+        # Extract text from PDF
+        pdf_path = article.file.path
+        text = extract_text_from_pdf(pdf_path)
+        
+        # Extract metadata using NLP
+        authors = extract_authors(text)
+        institutions = extract_institutions(text)
+        keywords = extract_keywords(text)
+        
+        # Save extracted metadata
+        article.extracted_authors = '|'.join(authors)
+        article.extracted_institutions = '|'.join(institutions)
+        article.extracted_keywords = '|'.join(keywords)
+        article.save()
+        
+        messages.success(request, "Article metadata extracted successfully.")
+        return redirect('editor_review', article_id=article.id)
+    
+    return render(request, 'articles/editor/process_metadata.html', {'article': article})
+
+def anonymize_article(request, article_id):
+    """Anonymize an article by replacing author and institution information"""
+
+    
+    article = get_object_or_404(Article, id=article_id)
+    
+    if request.method == 'POST':
+        # Get selected items to anonymize
+        authors_to_anonymize = request.POST.getlist('authors')
+        institutions_to_anonymize = request.POST.getlist('institutions')
+        
+        # Create anonymization map
+        anon_map = {}
+        for idx, author in enumerate(authors_to_anonymize):
+            anon_map[author] = f"Author-{idx+1}"
+        
+        for idx, institution in enumerate(institutions_to_anonymize):
+            anon_map[institution] = f"Institution-{idx+1}"
+        
+        # Save anonymization map to the article
+        article.set_anonymization_map(anon_map)
+        
+        # Create anonymized PDF
+        if anon_map:
+            pdf_path = article.file.path
+            anonymized_path = anonymize_pdf(pdf_path, anon_map)
+            
+            if anonymized_path:
+                # Save anonymized file to the article
+                with open(anonymized_path, 'rb') as f:
+                    article.anonymized_file.save(
+                        f"anonymized_{os.path.basename(article.file.name)}", 
+                        ContentFile(f.read())
+                    )
+                
+                # Clean up temporary file
+                os.remove(anonymized_path)
+                
+                article.is_anonymized = True
+                article.save()
+                
+                messages.success(request, "Article anonymized successfully.")
+            else:
+                messages.error(request, "Failed to anonymize article.")
+        else:
+            messages.warning(request, "No items selected for anonymization.")
+        
+        return redirect('editor_review', article_id=article.id)
+    
+    return render(request, 'articles/editor/anonymize.html', {
+        'article': article,
+        'authors': article.get_extracted_authors_list(),
+        'institutions': article.get_extracted_institutions_list()
+    })
+
+def download_anonymized_article(request, article_id):
+    """Download the anonymized version of an article"""
+    article = get_object_or_404(Article, id=article_id)
+    
+    if not article.anonymized_file:
+        messages.error(request, "No anonymized version available for this article.")
+        return redirect('editor_review', article_id=article.id)
+    
+    # Serve the anonymized file
+    response = HttpResponse(article.anonymized_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="anonymized_{article.tracking_code}.pdf"'
+    return response
+
+def suggest_referees(request, article_id):
+    """Suggest appropriate referees based on article keywords"""
+
+    article = get_object_or_404(Article, id=article_id)
+    
+    if not article.extracted_keywords:
+        messages.warning(request, "No keywords extracted. Process article metadata first.")
+        return redirect('process_article_metadata', article_id=article.id)
+    
+    # Get all referees
+    referees = Referee.objects.all()
+    
+    # Match referees by keywords
+    article_keywords = article.get_extracted_keywords_list()
+    matched_referees = match_referees_by_keywords(article_keywords, referees)
+    
+    return render(request, 'articles/editor/suggest_referees.html', {
+        'article': article,
+        'matched_referees': matched_referees,
+        'keywords': article_keywords
+    })
+
+def restore_article_info(request, article_id):
+    """Restore original author information after review (for referee)"""
+
+    article = get_object_or_404(Article, id=article_id)
+    referee = request.user.referee
+    
+    # Verify this referee is assigned to this article
+    if article.referee != referee:
+        messages.error(request, "You are not assigned to review this article.")
+        return redirect('referee_dashboard', referee_id=referee.id)
+    
+    if not article.is_anonymized or not article.anonymization_map:
+        messages.warning(request, "This article has not been anonymized.")
+        return redirect('referee_review', article_id=article.id, referee_id=referee.id)
+    
+    # Get anonymization map
+    anon_map = article.get_anonymization_map()
+    
+    # Create a reverse mapping (anonymized -> original)
+    reverse_map = {v: k for k, v in anon_map.items()}
+    
+    return render(request, 'articles/referee/restore_info.html', {
+        'article': article,
+        'anonymization_map': anon_map,
+        'reverse_map': reverse_map
+    })

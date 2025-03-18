@@ -166,4 +166,126 @@
         </div>
     </div>
 </div>
+
+<!-- Metadata and Anonymization Section -->
+<div class="mt-6 bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-lg font-semibold text-gray-800">Metadata & Anonymization</h2>
+    </div>
+    <div class="p-6">
+        <!-- Extracted Metadata -->
+        {% if article.extracted_keywords or article.extracted_authors or article.extracted_institutions %}
+        <div class="mb-4">
+            <h3 class="text-md font-medium text-gray-700 mb-3">Extracted Metadata</h3>
+            
+            {% if article.extracted_keywords %}
+            <div class="mb-2">
+                <p class="text-sm font-medium text-gray-500">Keywords:</p>
+                <div class="flex flex-wrap gap-2 mt-1">
+                    {% for keyword in article.get_extracted_keywords_list %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        {{ keyword }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if article.extracted_authors %}
+            <div class="mb-2">
+                <p class="text-sm font-medium text-gray-500">Authors:</p>
+                <div class="mt-1">
+                    <ul class="text-sm text-gray-700 list-disc list-inside">
+                        {% for author in article.get_extracted_authors_list %}
+                        <li>{{ author }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if article.extracted_institutions %}
+            <div>
+                <p class="text-sm font-medium text-gray-500">Institutions:</p>
+                <div class="mt-1">
+                    <ul class="text-sm text-gray-700 list-disc list-inside">
+                        {% for institution in article.get_extracted_institutions_list %}
+                        <li>{{ institution }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Anonymization Status -->
+        <div class="mb-4">
+            <h3 class="text-md font-medium text-gray-700 mb-2">Anonymization Status</h3>
+            {% if article.is_anonymized %}
+            <div class="flex items-center text-sm">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
+                    <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-green-400" fill="currentColor" viewBox="0 0 8 8">
+                        <circle cx="4" cy="4" r="3" />
+                    </svg>
+                    Anonymized
+                </span>
+                <span class="text-gray-500">Article has been anonymized</span>
+            </div>
+            {% else %}
+            <div class="flex items-center text-sm">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 mr-2">
+                    <svg class="-ml-0.5 mr-1.5 h-2 w-2 text-gray-400" fill="currentColor" viewBox="0 0 8 8">
+                        <circle cx="4" cy="4" r="3" />
+                    </svg>
+                    Not Anonymized
+                </span>
+                <span class="text-gray-500">Article has not been anonymized</span>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-2">
+            {% if not article.extracted_keywords and not article.extracted_authors and not article.extracted_institutions %}
+            <a href="{% url 'process_article_metadata' article.id %}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-magic mr-1"></i> Extract Metadata
+            </a>
+            {% else %}
+            <a href="{% url 'process_article_metadata' article.id %}" class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-sync-alt mr-1"></i> Re-extract Metadata
+            </a>
+            {% endif %}
+            
+            {% if article.extracted_authors or article.extracted_institutions %}
+            <a href="{% url 'anonymize_article' article.id %}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-user-secret mr-1"></i> {% if article.is_anonymized %}Re-anonymize{% else %}Anonymize{% endif %}
+            </a>
+            {% endif %}
+            
+            {% if article.anonymized_file %}
+            <a href="{% url 'download_anonymized_article' article.id %}" class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-download mr-1"></i> Download Anonymized
+            </a>
+            {% endif %}
+            
+            {% if article.extracted_keywords %}
+            <a href="{% url 'suggest_referees' article.id %}" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                <i class="fas fa-user-check mr-1"></i> Suggest Referees
+            </a>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="text-center py-6">
+            <div class="inline-block p-3 rounded-full bg-gray-100 mb-3">
+                <i class="fas fa-file-alt text-gray-400 text-xl"></i>
+            </div>
+            <h3 class="text-md font-medium text-gray-900 mb-1">No Metadata Extracted Yet</h3>
+            <p class="text-sm text-gray-500 mb-4">Extract metadata to identify authors, institutions, and keywords in this article.</p>
+            <a href="{% url 'process_article_metadata' article.id %}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <i class="fas fa-magic mr-2"></i> Extract Metadata
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}
