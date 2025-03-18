@@ -614,7 +614,7 @@ def reset_database_orm(request):
 
 
 from .utils import (extract_text_from_pdf, extract_authors, extract_institutions, 
-                   extract_keywords, create_anonymization_map, anonymize_pdf,
+                   extract_keywords, create_anonymization_map, anonymize_pdf,anonymize_pdf_legacy,
                    match_referees_by_keywords)
 from django.core.files.base import ContentFile
 import os
@@ -622,71 +622,65 @@ import json
 
 def process_article_metadata(request, article_id):
     """Extract metadata from an article using NLP"""
-
     article = get_object_or_404(Article, id=article_id)
     
     if request.method == 'POST':
-        # Extract text from PDF
+        # 1) PDF’den metni okuyalım
         pdf_path = article.file.path
         text = extract_text_from_pdf(pdf_path)
         
-        # Extract metadata using NLP
+        # 2) NLP fonksiyonlarıyla yazar, kurum, keyword çıkar
         authors = extract_authors(text)
         institutions = extract_institutions(text)
         keywords = extract_keywords(text)
         
-        # Save extracted metadata
+        # 3) Model alanlarına kaydet (örnek: '|' ile birleştirme)
         article.extracted_authors = '|'.join(authors)
         article.extracted_institutions = '|'.join(institutions)
         article.extracted_keywords = '|'.join(keywords)
-        article.save()
         
+        article.save()
         messages.success(request, "Article metadata extracted successfully.")
         return redirect('editor_review', article_id=article.id)
     
     return render(request, 'articles/editor/process_metadata.html', {'article': article})
 
+
 def anonymize_article(request, article_id):
     """Anonymize an article by replacing author and institution information"""
-
-    
     article = get_object_or_404(Article, id=article_id)
     
     if request.method == 'POST':
-        # Get selected items to anonymize
+        # 1) Formdan seçilen yazarlar/kurumlar
         authors_to_anonymize = request.POST.getlist('authors')
         institutions_to_anonymize = request.POST.getlist('institutions')
         
-        # Create anonymization map
+        # 2) Anonimleştirme haritası (örn. "MOHAMMAD ASIF" => "Author-1")
         anon_map = {}
         for idx, author in enumerate(authors_to_anonymize):
             anon_map[author] = f"Author-{idx+1}"
-        
         for idx, institution in enumerate(institutions_to_anonymize):
             anon_map[institution] = f"Institution-{idx+1}"
         
-        # Save anonymization map to the article
-        article.set_anonymization_map(anon_map)
+        # 3) Map’i kaydedebiliriz (projede set_anonymization_map varsa kullanabilirsiniz)
+        article.set_anonymization_map(anon_map)  # varsayıyoruz ki modelde böyle bir fonksiyon var
         
-        # Create anonymized PDF
+        # 4) PDF Anonimleştirme
         if anon_map:
             pdf_path = article.file.path
             anonymized_path = anonymize_pdf(pdf_path, anon_map)
             
             if anonymized_path:
-                # Save anonymized file to the article
+                # Anonimleştirilmiş PDF'yi Article modeline kaydet
                 with open(anonymized_path, 'rb') as f:
                     article.anonymized_file.save(
-                        f"anonymized_{os.path.basename(article.file.name)}", 
+                        f"anonymized_{os.path.basename(article.file.name)}",
                         ContentFile(f.read())
                     )
-                
-                # Clean up temporary file
-                os.remove(anonymized_path)
+                os.remove(anonymized_path)  # temp dosyayı sil
                 
                 article.is_anonymized = True
                 article.save()
-                
                 messages.success(request, "Article anonymized successfully.")
             else:
                 messages.error(request, "Failed to anonymize article.")
@@ -695,10 +689,11 @@ def anonymize_article(request, article_id):
         
         return redirect('editor_review', article_id=article.id)
     
+    # GET isteğinde, kullanıcıya hangi yazar/kurum anonimleştirilsin diye seçenek sunuyoruz
     return render(request, 'articles/editor/anonymize.html', {
         'article': article,
-        'authors': article.get_extracted_authors_list(),
-        'institutions': article.get_extracted_institutions_list()
+        'authors': article.get_extracted_authors_list(),       # '|'-separated -> list
+        'institutions': article.get_extracted_institutions_list()  # '|'-separated -> list
     })
 
 def download_anonymized_article(request, article_id):
@@ -728,7 +723,12 @@ def suggest_referees(request, article_id):
     
     # Match referees by keywords
     article_keywords = article.get_extracted_keywords_list()
-    matched_referees = match_referees_by_keywords(article_keywords, referees)
+    matched_referees_raw = match_referees_by_keywords(article_keywords, referees)
+    
+    # Convert scores to percentages
+    matched_referees = [(referee, score * 100) for referee, score in matched_referees_raw]
+    
+    print(matched_referees)
     
     return render(request, 'articles/editor/suggest_referees.html', {
         'article': article,

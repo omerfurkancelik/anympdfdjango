@@ -14,6 +14,8 @@ import tempfile
 import numpy as np
 import cv2
 
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 # Initialize logging
 logger = logging.getLogger(__name__)
 
@@ -39,245 +41,263 @@ except:
     import subprocess
     subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
+    
 
 def extract_text_from_pdf(pdf_path):
-    """Extract text content from a PDF file"""
-    text = ""
+    """
+    PDF'den metin okuyan basit bir fonksiyon örneği.
+    PyMuPDF (fitz) veya PyPDF2 kullanılabilir.
+    """
+    text = []
     try:
-        with open(pdf_path, 'rb') as file:
-            reader = PyPDF2.PdfReader(file)
-            for page_num in range(len(reader.pages)):
-                text += reader.pages[page_num].extract_text() + "\n"
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text.append(page.get_text())
+        return "\n".join(text)
     except Exception as e:
         logger.error(f"Error extracting text from PDF: {e}")
+        return ""
+        
+        
+    with open("denemetext.txt","w",encoding="utf-8") as f:
+        f.write(text)
     return text
 
 def extract_authors(text):
     """
-    Extract potential author names from text
-    Uses a combination of regex patterns and NLP to identify names
+    Metinden potansiyel yazar isimlerini çıkarmaya çalışır.
+    1) 'AUTHORS?' veya 'by' gibi kalıpları yakalar.
+    2) Bulamazsa spaCy ile PERSON etiketlerini çeker.
+    3) Doktora vb. unvanları siler, gereksiz kısımları temizler.
     """
-    # Extract author section with regex patterns
+    # Regex ile denenecek kalıplar
     author_section_patterns = [
         r'(?i)AUTHORS?:?\s*(.*?)(?:\n\n|\n\s*ABSTRACT)',
         r'(?i)(?:by|written by)\s+(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
     ]
     
     authors = []
+    found_via_regex = False
     for pattern in author_section_patterns:
-        matches = re.search(pattern, text)
-        if matches:
-            author_text = matches.group(1)
-            # Split by common separators
+        match = re.search(pattern, text, flags=re.DOTALL)
+        if match:
+            found_via_regex = True
+            author_text = match.group(1)
+            # virgül, "and", ";" vb. ayır
             potential_authors = re.split(r',|\band\b|;', author_text)
             authors.extend([a.strip() for a in potential_authors if a.strip()])
     
-    # If no authors found by patterns, use spaCy for named entity recognition
-    if not authors:
-        doc = nlp()  # Process first 5000 chars for efficiency
+    # Eğer Regex yoluyla bulamadıysak spaCy PERSON etiketlerini kullanalım
+    if not found_via_regex:
+        # Çok büyük metinleri kısaltabiliriz (örnek: ilk 5000 karakter)
+        doc = nlp(text[:5000])
         for ent in doc.ents:
             if ent.label_ == "PERSON":
-                authors.append(ent.text)
+                authors.append(ent.text.strip())
     
-    # Clean up and deduplicate
+    # Unvanları temizle (Dr., Prof. vb.)
     cleaned_authors = []
-    for author in authors:
-        # Remove titles and degrees
-        clean_author = re.sub(r'\b(Dr|Prof|PhD|MD|MSc|BSc|BA|MA)\.?\b', '', author)
-        clean_author = re.sub(r'\s+', ' ', clean_author).strip()
-        if clean_author and len(clean_author.split()) <= 4:  # Names typically have at most 4 parts
-            cleaned_authors.append(clean_author)
-            
-            
-    print("Temiz Olmayan Yazarlar : " + str(authors))
+    for a in authors:
+        clean_a = re.sub(r'\b(Dr|Prof|PhD|MD|MSc|BSc|BA|MA)\.?', '', a, flags=re.IGNORECASE)
+        # Birden fazla boşluğu teke indir
+        clean_a = re.sub(r'\s+', ' ', clean_a).strip()
+        # Çok uzun olmayan (örn. en fazla 4 kelime) isimleri al
+        if clean_a and len(clean_a.split()) <= 4:
+            cleaned_authors.append(clean_a)
     
-    return list(set(cleaned_authors))  # Remove duplicates
+    # Tekrarlıları temizleyelim
+    cleaned_authors = list(set(cleaned_authors))
+    logger.info(f"[extract_authors] Found authors: {cleaned_authors}")
+    return cleaned_authors
 
 def extract_institutions(text):
     """
-    Extract potential institution names from text
-    Uses a combination of regex patterns and NLP
+    Metinden potansiyel kurum (affiliation) bilgilerini çıkarır.
+    1) Regex ile 'affiliation', 'department' vb. kısımlara bakar.
+    2) Yoksa spaCy ile ORG etiketlerini çeker.
+    3) İçinde 'university', 'institute' vb. geçenleri tercih eder.
     """
-    # Common institution indicators
-    institution_indicators = [
-        r'(?i)(?:university|college|institute|school|department|laboratory|lab|center|centre)',
-        r'(?i)(?:corporation|inc\.|incorporated|llc|company|research|foundation)'
-    ]
-    
-    # Try to find institutional affiliations
+    # Denenecek kalıplar (affiliation, institution vs.)
     affiliation_patterns = [
-        r'(?i)(?:affiliation|department|institution)s?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
-        r'(?i)(?:^|\n)(?:\d\s+)?(?:affiliation|department|institution)s?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
+        r'(?i)(affiliation|department|institution)s?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
+        r'(?i)(?:\n)(?:\d\s+)?(affiliation|department|institution)s?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
     ]
-    
     institutions = []
     
-    # Extract using affiliation patterns
+    found_via_regex = False
     for pattern in affiliation_patterns:
-        matches = re.search(pattern, text)
-        if matches:
-            affiliation_text = matches.group(1)
-            # Split by common separators
-            potential_institutions = re.split(r';|\n', affiliation_text)
-            institutions.extend([i.strip() for i in potential_institutions if i.strip()])
+        match = re.search(pattern, text, flags=re.DOTALL)
+        if match:
+            found_via_regex = True
+            # group(2) varsa oradan alalım, zira group(1) 'affiliation' kelimesinin kendisi olabilir
+            affiliation_text = match.group(2) if match.lastindex == 2 else match.group(1)
+            potential_insts = re.split(r';|\n|,', affiliation_text)
+            institutions.extend([i.strip() for i in potential_insts if i.strip()])
     
-    # If no institutions found by patterns, use spaCy for named entity recognition
-    if not institutions:
-        doc = nlp(text)  # Process first 10000 chars for efficiency
+    if not found_via_regex:
+        # spaCy ile ORG yakalayalım
+        doc = nlp(text[:8000])
+        # Basit bir tespit kriteri: 'university', 'institute', vs. varsa al
+        key_words = ['university','universidade','institute','college','school','department','lab','laboratory',
+                     'foundation','company','inc','co.','corp','centre','center']
         for ent in doc.ents:
             if ent.label_ == "ORG":
-                # Check if the organization matches institutional indicators
-                if any(re.search(pattern, ent.text) for pattern in institution_indicators):
-                    institutions.append(ent.text)
+                # metin küçük harfe dönüştürüp anahtar kelimeler var mı bak
+                lower_org = ent.text.lower()
+                if any(kw in lower_org for kw in key_words):
+                    institutions.append(ent.text.strip())
     
-    # Clean up and deduplicate
-    cleaned_institutions = []
-    for institution in institutions:
-        clean_institution = re.sub(r'\s+', ' ', institution).strip()
-        if clean_institution:
-            cleaned_institutions.append(clean_institution)
-            
-            
-    print("Temiz Olmayan Endüstriler : " + str(institutions))
+    # Fazla boşlukları temizle
+    cleaned_inst = []
+    for inst in institutions:
+        c = re.sub(r'\s+', ' ', inst).strip()
+        if c:
+            cleaned_inst.append(c)
     
-    return list(set(cleaned_institutions))  # Remove duplicates
+    cleaned_inst = list(set(cleaned_inst))
+    logger.info(f"[extract_institutions] Found institutions: {cleaned_inst}")
+    return cleaned_inst
 
 def extract_keywords(text, min_keywords=3, max_keywords=10):
     """
-    Extract potential keywords from text using NLP techniques
+    Metinden (Keywords, Index Terms) bölümlerini veya yoksa
+    abstract üzerinden anahtar kelimeleri bulur.
+    Burada örneğin spaCy + basit regex yaklaşımı.
     """
-    try:
-        # First look for an explicit keywords section
-        keyword_section_patterns = [
-            r'(?i)keywords:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
-            r'(?i)key\s*words:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
-            r'(?i)index\s*terms:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
-        ]
-        
-        explicit_keywords = []
-        for pattern in keyword_section_patterns:
-            matches = re.search(pattern, text)
-            if matches:
-                keyword_text = matches.group(1)
-                # Split by common separators
-                keywords = re.split(r',|;', keyword_text)
-                explicit_keywords.extend([k.strip() for k in keywords if k.strip()])
-        
-        if explicit_keywords:
-            return explicit_keywords[:max_keywords]
-        
-        # If no explicit keywords, extract from abstract using NLP
-        abstract_pattern = r'(?i)abstract:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
-        abstract_match = re.search(abstract_pattern, text)
-        abstract_text = abstract_match.group(1) if abstract_match else text[:3000]
-        
-        # Process with spaCy
-        doc = nlp(abstract_text)
-        
-        # Extract noun phrases and named entities
-        stopwords = set(nltk.corpus.stopwords.words('english'))
-        candidates = []
-        
-        # Get noun phrases
-        for chunk in doc.noun_chunks:
-            if chunk.text.lower() not in stopwords and len(chunk.text.split()) <= 4:
-                candidates.append(chunk.text.lower())
-        
-        # Get named entities (except people)
-        for ent in doc.ents:
-            if ent.label_ not in ["PERSON"] and ent.text.lower() not in stopwords:
-                candidates.append(ent.text.lower())
-        
-        # Count frequencies
-        from collections import Counter
-        keyword_counter = Counter(candidates)
-        
-        # Get the most common keywords
-        keywords = [kw for kw, _ in keyword_counter.most_common(max_keywords)]
-        
-        # Ensure we have minimum number of keywords
-        if len(keywords) < min_keywords:
-            # Add individual nouns as fallback
-            nouns = [token.text.lower() for token in doc if token.pos_ == "NOUN" 
-                    and token.text.lower() not in stopwords]
-            noun_counter = Counter(nouns)
-            additional_keywords = [kw for kw, _ in noun_counter.most_common(min_keywords - len(keywords))]
-            keywords.extend(additional_keywords)
-        
-        return list(set(keywords))[:max_keywords]  # Remove duplicates and limit
-        
-    except Exception as e:
-        logger.error(f"Error extracting keywords: {e}")
-        return []
+    # 1) INDEX TERMS / KEYWORDS bölümünü ara
+    keyword_section_patterns = [
+        r'(?i)(?:index\s*terms|keywords):?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
+    ]
+    
+    explicit_keywords = []
+    for pattern in keyword_section_patterns:
+        match = re.search(pattern, text, flags=re.DOTALL)
+        if match:
+            kw_text = match.group(1)
+            # virgülle böl
+            potential_kws = re.split(r',|;', kw_text)
+            explicit_keywords.extend([k.strip() for k in potential_kws if k.strip()])
+    
+    if explicit_keywords:
+        # Bulunan keywordler
+        unique_kws = list(set(explicit_keywords))
+        return unique_kws[:max_keywords]
+    
+    # 2) Eğer bulamadıysak, Abstract üzerinden spaCy noun_chunks / named_entities
+    abstract_pattern = r'(?i)abstract:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
+    match_abstract = re.search(abstract_pattern, text, flags=re.DOTALL)
+    if match_abstract:
+        abstract_text = match_abstract.group(1)
+    else:
+        # Abstract yoksa metnin ilk ~3000 karakterini kullanıyoruz
+        abstract_text = text[:3000]
+    
+    doc = nlp(abstract_text)
+    
+    # Noun chunks + ORG, PRODUCT vb. entity
+    candidates = []
+    for chunk in doc.noun_chunks:
+        if len(chunk.text.split()) <= 3:  # fazla uzun olmayan ifadeler
+            candidates.append(chunk.text.lower())
+    
+    for ent in doc.ents:
+        if ent.label_ not in ("PERSON", "CARDINAL", "DATE", "TIME"):
+            candidates.append(ent.text.lower())
+    
+    # Bir sıklık hesaplaması
+    from collections import Counter
+    kw_counter = Counter(candidates)
+    most_common = [x for x, _ in kw_counter.most_common(max_keywords*2)]
+    
+    # min_keywords kadar geri döndür
+    final_kws = []
+    for mc in most_common:
+        if mc not in final_kws:
+            final_kws.append(mc)
+        if len(final_kws) >= max_keywords:
+            break
+    
+    if len(final_kws) < min_keywords:
+        # fallback: en azından min_keywords döndür
+        return final_kws + ["keyword"]*(min_keywords - len(final_kws))
+    
+    logger.info(f"[extract_keywords] Found keywords: {final_kws}")
+    return final_kws
 
 def anonymize_pdf(pdf_path, anonymize_map):
     """
-    Simplified approach that focuses on robust text anonymization
-    and adds white rectangles over detected faces
+    1) Metin redaksiyonu (search_for -> add_redact_annot -> apply_redactions).
+    2) Her sayfadaki gömülü resimleri bularak yüzleri bulanıklaştırır.
+    3) İşlenmiş PDF'yi geçici bir dosyaya kaydedip onun path'ini döndürür.
     """
     try:
-        # Create a temporary file for the anonymized PDF
+        import fitz
+        
         temp_fd, temp_path = tempfile.mkstemp(suffix='.pdf')
         os.close(temp_fd)
         
-        # Open the PDF
         doc = fitz.open(pdf_path)
         
-        # Process each page
+        # -------------------------------------------------
+        # A) METİN REDAKSİYONU
+        # -------------------------------------------------
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             
-            # 1. Text anonymization - this is the most reliable part
+            # 1) Metin anonimleştirme (redaction)
             for original, replacement in anonymize_map.items():
-                # Search for text instances and replace them
+                # Tüm eşleşmeleri bul
                 text_instances = page.search_for(original)
                 for inst in text_instances:
-                    # Add redaction annotation
-                    annot = page.add_redact_annot(inst, text=replacement)
-                    # Apply redactions
-                    page.apply_redactions()
-            
-            # 2. Simple face detection and covering with white rectangles
-            try:
-                # Get page pixmap (rasterize the page)
-                pix = page.get_pixmap()
-                img_data = pix.tobytes()
-                
-                # Convert to PIL image
-                pil_img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
-                
-                # Detect faces
-                img_bytes = io.BytesIO()
-                pil_img.save(img_bytes, format="PNG")
-                img_bytes.seek(0)
-                faces = detect_faces(img_bytes.getvalue())
-                
-                # If faces detected, add white rectangles over them
-                if faces and len(faces):
-                    logger.info(f"Found {len(faces)} faces on page {page_idx+1}")
-                    
-                    for (x, y, w, h) in faces:
-                        # Scale face coordinates to match the page dimensions
-                        scale_x = page.rect.width / pix.width
-                        scale_y = page.rect.height / pix.height
-                        
-                        # Create rectangle with some padding
-                        padding = 5
-                        face_rect = fitz.Rect(
-                            x * scale_x - padding,
-                            y * scale_y - padding,
-                            (x + w) * scale_x + padding,
-                            (y + h) * scale_y + padding
-                        )
-                        
-                        # Add white rectangle with high opacity
-                        page.draw_rect(face_rect, color=(1, 1, 1), fill=(1, 1, 1), opacity=0.9)
-            
-            except Exception as e:
-                logger.error(f"Error processing faces on page {page_idx+1}: {e}")
-                # Continue to next page even if this page fails
+                    annot = page.add_redact_annot(inst, text=replacement, fill=(1,1,1))
+                # Redaction uygula
+                page.apply_redactions(images=False)  # images=False => resimleri silme
         
-        # Save the anonymized PDF
+        # -------------------------------------------------
+        # B) GÖMÜLÜ GÖRSELLERİ BULUP YÜZLERİ BULANIKLAŞTIRMA
+        # -------------------------------------------------
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+            
+            # Bu liste, sayfadaki tüm resimleri (xref vs.) döndürür
+            image_list = page.get_images(full=True)
+            
+            if not image_list:
+                continue  # Bu sayfada gömülü resim yok
+            
+            for img_info in image_list:
+                # genelde img_info[0] xref oluyor
+                # fitz doc: [xref, smask, width, height, bpc, colorspace, ...]
+                xref = img_info[0]
+                
+                # Resmi bellek olarak çek
+                img_dict = safely_extract_image(doc, xref)
+                if not img_dict:
+                    continue  # extraction başarısız
+                
+                img_bytes = img_dict["image"]
+                
+                # Yüz tespiti
+                faces = detect_faces(img_bytes)
+                if not faces:
+                    continue  # Yüz yoksa blur gereksiz
+                
+                # Blur uygula
+                blurred_bytes = blur_faces(img_bytes, faces)
+                
+                # Şayet blur uygulanmışsa, orijinalle aynı olmayabilir
+                if blurred_bytes != img_bytes:
+                    # Şimdi page.update_image ile yenisini koyuyoruz
+                    try:
+                        # Not: update_image() PyMuPDF 1.18+ sürümlerde mevcuttur.
+                        page.replace_image(xref, stream=blurred_bytes)
+                        print("BLURLANDI")
+                    except Exception as e:
+                        logger.error(f"Failed to update image xref={xref}: {e}")
+        
+        # -------------------------------------------------
+        # C) Değişiklikleri kaydet
+        # -------------------------------------------------
         doc.save(temp_path)
         doc.close()
         
@@ -286,8 +306,7 @@ def anonymize_pdf(pdf_path, anonymize_map):
     except Exception as e:
         logger.error(f"Error anonymizing PDF: {e}")
         return None
-    
-    
+
     
 def create_anonymization_map(authors, institutions):
     """
@@ -359,6 +378,10 @@ def detect_faces(image_bytes):
         faces_list = []
         for (x, y, w, h) in faces:
             faces_list.append((int(x), int(y), int(w), int(h)))
+            
+            
+        
+        print(faces_list)
         
         return faces_list
     except Exception as e:
@@ -463,6 +486,8 @@ def match_referees_by_keywords(article_keywords, referees):
     """
     article_keywords = [k.lower() for k in article_keywords]
     
+    #print(article_keywords)
+    
     referee_scores = []
     for referee in referees:
         if not referee.specialization:
@@ -471,8 +496,12 @@ def match_referees_by_keywords(article_keywords, referees):
             # Split referee specialization into individual keywords
             referee_keywords = [k.strip().lower() for k in referee.specialization.split(',')]
             
+            #print(referee_keywords)
+            
             # Count matches between article keywords and referee specialization
             matches = sum(1 for kw in article_keywords if any(kw in ref_kw or ref_kw in kw for ref_kw in referee_keywords))
+            
+            #print(matches)
             
             # Score is the percentage of article keywords that match referee specialization
             score = matches / len(article_keywords) if article_keywords else 0
@@ -480,6 +509,7 @@ def match_referees_by_keywords(article_keywords, referees):
         referee_scores.append((referee, score))
     
     # Sort by score in descending order
+    #print(referee_scores)
     return sorted(referee_scores, key=lambda x: x[1], reverse=True)
 
 
@@ -502,3 +532,73 @@ def safe_operation(operation_func, error_message, default_return=None, *args, **
     except Exception as e:
         logger.error(f"{error_message}: {e}")
         return default_return
+    
+    
+    
+import fitz
+
+def replace_image_legacy(page, xref, blurred_bytes, bbox):
+    """
+    Eski PyMuPDF sürümünde page.update_image() yoksa,
+    yeni resmi belirlenen 'bbox' bölgesine insert_image ile ekliyoruz.
+    'xref'li orijinal resim durabilir, ama görsel olarak kaplamış oluruz.
+    """
+    # Örneğin, x0,y0,x1,y1 = bbox
+    page.insert_image(bbox, stream=blurred_bytes)
+
+def anonymize_pdf_legacy(pdf_path, anonymize_map):
+    """
+    Eski PyMuPDF sürümleriyle çalışan bir örnek:
+    1) Metin redaction
+    2) Her sayfadaki resimleri -> detect_faces -> blur -> insert_image
+    """
+    temp_fd, temp_path = tempfile.mkstemp(suffix='.pdf')
+    os.close(temp_fd)
+    
+    doc = fitz.open(pdf_path)
+    
+    # A) Metin anonimleştirme (redaction)
+    for page_idx in range(len(doc)):
+        page = doc[page_idx]
+        for original, replacement in anonymize_map.items():
+            text_instances = page.search_for(original)
+            for inst in text_instances:
+                annot = page.add_redact_annot(inst, text=replacement, fill=(1,1,1))
+            page.apply_redactions(images=False)
+    
+    # B) Resimleri bul -> yüzleri bulanıklaştır -> insert_image
+    for page_idx in range(len(doc)):
+        page = doc[page_idx]
+        image_list = page.get_images(full=True)
+        if not image_list:
+            continue
+        
+        for img_info in image_list:
+            xref = img_info[0]
+            # Resmi çıkar
+            img_dict = doc.extract_image(xref)
+            if not img_dict:
+                continue
+            
+            img_bytes = img_dict["image"]
+            faces = detect_faces(img_bytes)
+            if not faces:
+                continue
+            
+            blurred_bytes = blur_faces(img_bytes, faces)
+            if blurred_bytes != img_bytes:
+                # Resmi ekleyeceğimiz dikdörtgeni bulmak gerekiyor
+                # Her resmin bounding box'ına erişmek PyMuPDF eski sürümde
+                # doğrudan kolay olmayabilir. Tek seçenek: sayfayı rasterize edin 
+                # veya tahmini bir rect belirleyin. 
+                # Örn. sayfanın tam boyutu:
+                rect = page.rect  # Tam sayfa
+                # Gerçek bounding box'ı bulacaksanız, 
+                #   muhtemelen "img_info"dan width/height alıp 
+                #   sayfadaki konumunu hesaplamanız gerek.
+                
+                replace_image_legacy(page, xref, blurred_bytes, rect)
+    
+    doc.save(temp_path)
+    doc.close()
+    return temp_path
