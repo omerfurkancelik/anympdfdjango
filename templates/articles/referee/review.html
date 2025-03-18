@@ -8,7 +8,7 @@
         <div class="p-6">
             <div class="flex justify-between items-center mb-6">
                 <h1 class="text-2xl font-bold text-gray-800">Review Article: {{ article.tracking_code }}</h1>
-                <a href="{% url 'referee_dashboard' %}" class="text-indigo-600 hover:text-indigo-700">
+                <a href="{% url 'referee_dashboard' referee.id %}" class="text-indigo-600 hover:text-indigo-700">
                     <i class="fas fa-arrow-left mr-1"></i> Back to Dashboard
                 </a>
             </div>
@@ -45,7 +45,7 @@
                 </div>
             </div>
             
-            <!-- Referee Assignment & Status Update Form -->
+            <!-- Referee Feedback Form -->
             <form method="post" class="mb-6">
                 {% csrf_token %}
                 {{ form|crispy }}
@@ -56,8 +56,6 @@
                 >
                 Submit Feedback
                 </button>
-                
-                
             </form>
             
         </div>

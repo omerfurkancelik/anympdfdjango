@@ -43,10 +43,11 @@ class Editor(models.Model):
     
 class Referee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    specialization = models.CharField(max_length=255, blank=True, help_text="Referee's area of expertise (e.g., Machine Learning, Data Science)")
     
     def __str__(self):
         return self.user.username
-
+    
 class ArticleFeedback(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE)
     referee = models.ForeignKey(Referee, on_delete=models.CASCADE)

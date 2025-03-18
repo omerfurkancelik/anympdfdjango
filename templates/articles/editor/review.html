@@ -134,7 +134,7 @@
                                 
                                 <div class="mb-4">
                                     <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
-                                    <select id="status" name="status" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                                    <select id="status" name="status" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
                                         {% for status_value, status_label in article.STATUS_CHOICES %}
                                         <option value="{{ status_value }}" {% if article.status == status_value %}selected{% endif %}>
                                             {{ status_label }}

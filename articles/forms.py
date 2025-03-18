@@ -47,3 +47,22 @@ class ArticleFeedbackForm(forms.ModelForm):
                 'class': 'form-select px-4 py-3 rounded-md'
             })
         }
+        
+        
+class AddRefereeForm(forms.Form):
+    username = forms.CharField(max_length=150, required=True, widget=forms.TextInput(attrs={
+        'class': 'form-input px-4 py-3 rounded-md',
+        'placeholder': 'Username'
+    }))
+    email = forms.EmailField(required=True, widget=forms.EmailInput(attrs={
+        'class': 'form-input px-4 py-3 rounded-md',
+        'placeholder': 'Email address'
+    }))
+    password = forms.CharField(widget=forms.PasswordInput(attrs={
+        'class': 'form-input px-4 py-3 rounded-md',
+        'placeholder': 'Password'
+    }))
+    specialization = forms.CharField(max_length=255, required=False, widget=forms.TextInput(attrs={
+        'class': 'form-input px-4 py-3 rounded-md',
+        'placeholder': 'Area of expertise (e.g., Machine Learning, Data Science)'
+    }))

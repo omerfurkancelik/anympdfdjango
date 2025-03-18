@@ -5,7 +5,12 @@
     <div class="bg-white rounded-lg shadow-card overflow-hidden">
         <div class="gradient-bg h-2"></div>
         <div class="p-6">
-            <h1 class="text-3xl font-bold mb-6 text-gray-800">Referee Dashboard</h1>
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800">Referee Dashboard</h1>
+                <a href="{% url 'referee_list' %}" class="text-indigo-600 hover:text-indigo-900">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Referees List
+                </a>
+            </div>
             
             <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
                 <div class="flex">
@@ -14,7 +19,7 @@
                     </div>
                     <div class="ml-3">
                         <p class="text-sm text-indigo-700">
-                            Welcome, Referee. Here you can assess all articles assigned to you.
+                            Welcome, Referee {{ referee.user.username }}. Here you can assess all articles assigned to you.
                         </p>
                     </div>
                 </div>
@@ -82,7 +87,7 @@
                             </td>
                             <td class="py-4 px-4 whitespace-nowrap text-sm font-medium">
                                 <div class="flex space-x-2">
-                                    <a href="{% url 'referee_review' article.id %}" class="text-green-600 hover:text-green-900">
+                                    <a href="{% url 'referee_review' article_id=article.id referee_id=referee.id %}" class="text-green-600 hover:text-green-900">
                                         <i class="fas fa-book"></i>
                                     </a>
                                     <a href="{% url 'download_article' article.id %}" class="text-gray-600 hover:text-gray-900">

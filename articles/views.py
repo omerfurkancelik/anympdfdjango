@@ -6,9 +6,10 @@ from django.conf import settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.http import HttpResponseForbidden
-
 from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback
-from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm
+from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm, AddRefereeForm
+
+import os
 
 def is_editor(user):
     return hasattr(user, 'editor')
@@ -18,6 +19,9 @@ def is_referee(user):
 
 def home(request):
     return render(request, 'articles/home.html')
+
+
+
 
 # User section views
 def upload_article(request):
@@ -200,10 +204,30 @@ def editor_chat(request, article_id):
     })
 
 # Referee section views
-def referee_dashboard(request):
-    referee = User.objects.get(email="ref1@test.com").referee
+def referee_list(request):
+    """
+    Display a list of all referees in the system.
+    """
+    referees = Referee.objects.all()
+    return render(request, 'articles/referee/list.html', {'referees': referees})
+
+# Update the referee_dashboard view to accept a referee_id parameter
+def referee_dashboard(request, referee_id=None):
+    """
+    Display the dashboard for a specific referee.
+    If referee_id is not provided, it falls back to ref1@test.com.
+    """
+    try:
+        if referee_id:
+            referee = get_object_or_404(Referee, id=referee_id)
+        else:
+            # Fallback to the default referee if no specific one is selected
+            referee = User.objects.get(email="ref1@test.com").referee
+    except (Referee.DoesNotExist, User.DoesNotExist):
+        messages.error(request, "Referee not found.")
+        return redirect('referee_list')
     
-    # Instead of referee.articles.all(), use the related_name from Article model
+    # Get articles assigned to this referee
     articles = Article.objects.filter(referee=referee)
     
     if request.method == 'POST':
@@ -215,7 +239,6 @@ def referee_dashboard(request):
             feedback.article = article
             feedback.referee = referee
             feedback.save()
-
     else:
         form = ArticleFeedbackForm()
 
@@ -235,10 +258,19 @@ def referee_dashboard(request):
     }
     return render(request, 'articles/referee/dashboard.html', context)
 
-def referee_review(request, article_id):
-    referee = User.objects.get(email="ref1@test.com").referee
+# Update the referee_review view to work with the new dashboard
+def referee_review(request, article_id, referee_id=None):
+    try:
+        if referee_id:
+            referee = get_object_or_404(Referee, id=referee_id)
+        else:
+            # Fallback to the default referee if no specific one is selected
+            referee = User.objects.get(email="ref1@test.com").referee
+    except (Referee.DoesNotExist, User.DoesNotExist):
+        messages.error(request, "Referee not found.")
+        return redirect('referee_list')
     
-    # Instead of filtering with referees=referee, filter with referee=referee
+    # Get the article that belongs to this referee
     article = get_object_or_404(Article, id=article_id, referee=referee)
     
     try:
@@ -255,7 +287,6 @@ def referee_review(request, article_id):
             feedback.save()
             
             # Notify editor about new feedback
-            # Since editors is a ManyToMany field, we don't need to change this part
             editors = article.editors.all()
             for editor in editors:
                 subject = f'New Referee Feedback on Article: {article.tracking_code}'
@@ -272,16 +303,19 @@ def referee_review(request, article_id):
                 #send_mail(subject, message, settings.EMAIL_HOST_USER, [editor.user.email])
             
             messages.success(request, 'Your feedback has been submitted')
-            return redirect('referee_dashboard')
+            return redirect('referee_dashboard', referee_id=referee.id)
     else:
         form = ArticleFeedbackForm(instance=feedback)
     
     return render(request, 'articles/referee/review.html', {
         'article': article,
         'form': form,
-        'feedback': feedback
+        'feedback': feedback,
+        'referee': referee
     })
-
+    
+    
+    
 def download_article(request, article_id):
     article = get_object_or_404(Article, id=article_id)
     # Add logic to serve the file securely
@@ -289,3 +323,60 @@ def download_article(request, article_id):
     response = HttpResponse(article.file, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{article.tracking_code}.pdf"'
     return response
+
+
+
+def add_referee(request):
+
+        
+    if request.method == 'POST':
+        form = AddRefereeForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data['username']
+            email = form.cleaned_data['email']
+            password = form.cleaned_data['password']
+            specialization = form.cleaned_data['specialization']
+            
+            # Check if username or email already exists
+            if User.objects.filter(username=username).exists():
+                messages.error(request, f"Username '{username}' is already taken.")
+                return render(request, 'articles/referee/add.html', {'form': form})
+                
+            if User.objects.filter(email=email).exists():
+                messages.error(request, f"Email '{email}' is already registered.")
+                return render(request, 'articles/referee/add.html', {'form': form})
+            
+            # Create the user and referee
+            user = User.objects.create_user(username=username, email=email, password=password)
+            referee = Referee.objects.create(user=user, specialization=specialization)
+            
+            messages.success(request, f"Referee '{username}' has been successfully added.")
+            return redirect('referee_list')
+    else:
+        form = AddRefereeForm()
+    
+    return render(request, 'articles/referee/add.html', {'form': form})
+
+
+
+def delete_article(request, article_id):
+
+    
+    article = get_object_or_404(Article, id=article_id)
+    
+    if request.method == 'POST':
+        # Delete the article file from storage
+        if article.file:
+            if os.path.isfile(article.file.path):
+                os.remove(article.file.path)
+        
+        # Store tracking code for confirmation message
+        tracking_code = article.tracking_code
+        
+        # Delete the article from the database
+        article.delete()
+        
+        messages.success(request, f"Article {tracking_code} has been successfully deleted.")
+        return redirect('editor_dashboard')
+    
+    return render(request, 'articles/editor/delete_confirm.html', {'article': article})

@@ -1,0 +1,67 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800">Referees</h1>
+                <a href="{% url 'add_referee' %}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    <i class="fas fa-plus mr-2"></i> Add Referee
+                </a>
+            </div>
+            
+            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-indigo-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-indigo-700">
+                            Select a referee to view their dashboard and assigned articles.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Referees List -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {% for referee in referees %}
+                <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                    <div class="p-6">
+                        <div class="flex items-center mb-4">
+                            <div class="bg-indigo-100 rounded-full p-3 mr-4">
+                                <i class="fas fa-user-graduate text-indigo-600 text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900">{{ referee.user.username }}</h3>
+                                <p class="text-sm text-gray-500">{{ referee.user.email }}</p>
+                                {% if referee.specialization %}
+                                <p class="text-xs mt-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-full inline-block">
+                                    {{ referee.specialization }}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <a href="{% url 'referee_dashboard' referee.id %}" class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                View Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="md:col-span-3 text-center py-12">
+                    <div class="inline-block p-4 rounded-full bg-gray-100 mb-4">
+                        <i class="fas fa-user-slash text-gray-400 text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900">No Referees Found</h3>
+                    <p class="text-gray-500 mt-2">There are currently no referees in the system.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -94,14 +94,17 @@
                             </td>
                             <td class="py-4 px-4 whitespace-nowrap text-sm font-medium">
                                 <div class="flex space-x-2">
-                                    <a href="{% url 'editor_review' article.id %}" class="text-indigo-600 hover:text-indigo-900">
+                                    <a href="{% url 'editor_review' article.id %}" class="text-indigo-600 hover:text-indigo-900" title="Review">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="{% url 'download_article' article.id %}" class="text-gray-600 hover:text-gray-900">
+                                    <a href="{% url 'download_article' article.id %}" class="text-gray-600 hover:text-gray-900" title="Download">
                                         <i class="fas fa-download"></i>
                                     </a>
-                                    <a href="{% url 'editor_chat' article.id %}" class="text-green-600 hover:text-green-900">
+                                    <a href="{% url 'editor_chat' article.id %}" class="text-green-600 hover:text-green-900" title="Messages">
                                         <i class="fas fa-comments"></i>
+                                    </a>
+                                    <a href="{% url 'delete_article' article.id %}" class="text-red-600 hover:text-red-900" title="Delete">
+                                        <i class="fas fa-trash"></i>
                                     </a>
                                 </div>
                             </td>
