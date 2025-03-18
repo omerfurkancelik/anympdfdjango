@@ -572,11 +572,11 @@ def suggest_referees(request, article_id):
         'keywords': article_keywords
     })
 
-def restore_article_info(request, article_id):
+def restore_article_info(request, article_id, referee_id):
     """Restore original author information after review (for referee)"""
 
     article = get_object_or_404(Article, id=article_id)
-    referee = request.user.referee
+    referee = get_object_or_404(Referee, id=referee_id)
     
     # Verify this referee is assigned to this article
     if article.referee != referee:

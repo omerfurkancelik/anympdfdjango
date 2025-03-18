@@ -11,6 +11,9 @@ import logging
 # Initialize logging
 logger = logging.getLogger(__name__)
 
+import warnings
+warnings.filterwarnings("ignore")
+
 # Download NLTK data if not already present
 try:
     nltk.data.find('tokenizers/punkt')

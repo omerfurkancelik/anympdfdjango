@@ -29,7 +29,7 @@ urlpatterns = [
     path('referee/<int:referee_id>/review/<int:article_id>/', views.referee_review, name='referee_review'),
     path('referee/dashboard/', views.referee_dashboard, name='referee_dashboard_default'),
     path('referees/add/', views.add_referee, name='add_referee'),
-    path('referee/article/<int:article_id>/restore-info/', views.restore_article_info, name='restore_article_info'),
+    path('referee/article/<int:article_id>/<int:referee_id>/restore-info/', views.restore_article_info, name='restore_article_info'),
 
 
     
