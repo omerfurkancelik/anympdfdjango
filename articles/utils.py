@@ -89,7 +89,7 @@ def extract_authors(text):
             cleaned_authors.append(clean_author)
             
             
-    print("Temiz Yazarlar : " + cleaned_authors)
+    print("Temiz Olmayan Yazarlar : " + str(authors))
     
     return list(set(cleaned_authors))  # Remove duplicates
 
@@ -136,6 +136,9 @@ def extract_institutions(text):
         clean_institution = re.sub(r'\s+', ' ', institution).strip()
         if clean_institution:
             cleaned_institutions.append(clean_institution)
+            
+            
+    print("Temiz Olmayan Endüstriler : " + str(institutions))
     
     return list(set(cleaned_institutions))  # Remove duplicates
 
@@ -209,10 +212,8 @@ def extract_keywords(text, min_keywords=3, max_keywords=10):
 
 def anonymize_pdf(pdf_path, anonymize_map):
     """
-    Create an anonymized version of the PDF with proper text replacement
-    and image blurring for author photos using face detection
-    
-    This preserves the original PDF structure and only anonymizes the relevant content
+    Simplified approach that focuses on robust text anonymization
+    and adds white rectangles over detected faces
     """
     try:
         # Create a temporary file for the anonymized PDF
@@ -226,44 +227,55 @@ def anonymize_pdf(pdf_path, anonymize_map):
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             
-            # 1. Handle text replacement - particularly for author names and institutions
+            # 1. Text anonymization - this is the most reliable part
             for original, replacement in anonymize_map.items():
                 # Search for text instances and replace them
                 text_instances = page.search_for(original)
                 for inst in text_instances:
-                    # Create a redaction annotation for this text
+                    # Add redaction annotation
                     annot = page.add_redact_annot(inst, text=replacement)
-                    # Apply the redactions
+                    # Apply redactions
                     page.apply_redactions()
             
-            # 2. Handle images - detect and blur faces in images
-            # Extract images from the page
-            image_list = page.get_images(full=True)
-            
-            for img_idx, img_info in enumerate(image_list):
-                xref = img_info[0]  # xref number
+            # 2. Simple face detection and covering with white rectangles
+            try:
+                # Get page pixmap (rasterize the page)
+                pix = page.get_pixmap()
+                img_data = pix.tobytes()
                 
-                # Try to get the image
-                try:
-                    base_img = doc.extract_image(xref)
-                    img_bytes = base_img["image"]
-                    img_ext = base_img["ext"]
+                # Convert to PIL image
+                pil_img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+                
+                # Detect faces
+                img_bytes = io.BytesIO()
+                pil_img.save(img_bytes, format="PNG")
+                img_bytes.seek(0)
+                faces = detect_faces(img_bytes.getvalue())
+                
+                # If faces detected, add white rectangles over them
+                if faces and len(faces):
+                    logger.info(f"Found {len(faces)} faces on page {page_idx+1}")
                     
-                    # Detect faces in the image
-                    faces = detect_faces(img_bytes)
-                    
-                    # If faces are found, blur them
-                    if faces:
-                        logger.info(f"Found {len(faces)} faces in image on page {page_idx+1}")
-                        blurred_img_bytes = blur_faces(img_bytes, faces)
+                    for (x, y, w, h) in faces:
+                        # Scale face coordinates to match the page dimensions
+                        scale_x = page.rect.width / pix.width
+                        scale_y = page.rect.height / pix.height
                         
-                        # Replace the image in the document
-                        doc.delete_image(xref)  # Remove old image
-                        rect = fitz.Rect(img_info[1:5])  # Get the rectangle where the image is
-                        page.insert_image(rect, stream=blurred_img_bytes)  # Insert blurred image
-                except Exception as e:
-                    logger.error(f"Error processing image {img_idx} on page {page_idx}: {e}")
-                    continue
+                        # Create rectangle with some padding
+                        padding = 5
+                        face_rect = fitz.Rect(
+                            x * scale_x - padding,
+                            y * scale_y - padding,
+                            (x + w) * scale_x + padding,
+                            (y + h) * scale_y + padding
+                        )
+                        
+                        # Add white rectangle with high opacity
+                        page.draw_rect(face_rect, color=(1, 1, 1), fill=(1, 1, 1), opacity=0.9)
+            
+            except Exception as e:
+                logger.error(f"Error processing faces on page {page_idx+1}: {e}")
+                # Continue to next page even if this page fails
         
         # Save the anonymized PDF
         doc.save(temp_path)
@@ -274,6 +286,9 @@ def anonymize_pdf(pdf_path, anonymize_map):
     except Exception as e:
         logger.error(f"Error anonymizing PDF: {e}")
         return None
+    
+    
+    
 def create_anonymization_map(authors, institutions):
     """
     Create a mapping of original text to anonymized replacements
@@ -309,10 +324,19 @@ def detect_faces(image_bytes):
         nparr = np.frombuffer(image_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
+        # Check if image was loaded properly
+        if img is None or img.size == 0:
+            logger.warning("Failed to decode image")
+            return []
+        
         # Load the pre-trained face detector model
-        # Using Haar cascades for simplicity and speed
         face_cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         face_cascade = cv2.CascadeClassifier(face_cascade_path)
+        
+        # Verify the cascade loaded correctly
+        if face_cascade.empty():
+            logger.error("Failed to load face cascade classifier")
+            return []
         
         # Convert to grayscale for face detection
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -326,10 +350,40 @@ def detect_faces(image_bytes):
             flags=cv2.CASCADE_SCALE_IMAGE
         )
         
-        return faces
+        # Handle the case where no faces are found
+        if isinstance(faces, tuple) and len(faces) == 0:
+            return []
+        
+        # Convert faces to a list if it's a numpy array
+        # This avoids the "truth value of an array is ambiguous" error
+        faces_list = []
+        for (x, y, w, h) in faces:
+            faces_list.append((int(x), int(y), int(w), int(h)))
+        
+        return faces_list
     except Exception as e:
         logger.error(f"Error detecting faces: {e}")
         return []
+
+# Safe image extraction from PDF function
+def safely_extract_image(doc, xref):
+    """
+    Safely extract an image from a PDF document
+    
+    Args:
+        doc: PyMuPDF document
+        xref: Image reference
+        
+    Returns:
+        Dictionary with image data or None if extraction failed
+    """
+    try:
+        return doc.extract_image(xref)
+    except Exception as e:
+        logger.error(f"Failed to extract image (xref {xref}): {e}")
+        return None
+    
+    
 
 def blur_faces(image_bytes, faces):
     """
@@ -351,13 +405,21 @@ def blur_faces(image_bytes, faces):
             # Convert to numpy for OpenCV processing
             img_np = np.array(img)
             
-            # Convert RGB to BGR for OpenCV
+            # Convert RGB to BGR for OpenCV if needed
+            # Check if the array has 3 dimensions and the last dimension is 3 (RGB)
             if len(img_np.shape) == 3 and img_np.shape[2] == 3:
                 img_np = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             
             # For each face, apply a heavy blur
             for (x, y, w, h) in faces:
-                # Apply a stronger blur to ensure anonymity
+                # Make sure coordinates are within image bounds
+                x, y = max(0, x), max(0, y)
+                w = min(w, img_np.shape[1] - x)
+                h = min(h, img_np.shape[0] - y)
+                
+                if w <= 0 or h <= 0:
+                    continue  # Skip if dimensions are invalid
+                
                 # Get the face region
                 face_region = img_np[y:y+h, x:x+w]
                 
@@ -367,7 +429,7 @@ def blur_faces(image_bytes, faces):
                 # Replace the region with the blurred version
                 img_np[y:y+h, x:x+w] = blurred_face
             
-            # Convert back to RGB for PIL
+            # Convert back to RGB for PIL if needed
             if len(img_np.shape) == 3 and img_np.shape[2] == 3:
                 img_np = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
             
@@ -376,15 +438,24 @@ def blur_faces(image_bytes, faces):
         
         # Convert back to bytes
         output_buffer = io.BytesIO()
-        img.save(output_buffer, format=img.format or "PNG")
+        img_format = img.format or "PNG"
+        
+        # Some formats like JPEG2000 might not be supported by PIL's save
+        # Fall back to PNG in those cases
+        try:
+            img.save(output_buffer, format=img_format)
+        except (KeyError, IOError):
+            img.save(output_buffer, format="PNG")
+            
         output_buffer.seek(0)
         
         return output_buffer.getvalue()
     except Exception as e:
         logger.error(f"Error blurring faces: {e}")
         return image_bytes  # Return original if processing fails
-
-
+    
+    
+    
 def match_referees_by_keywords(article_keywords, referees):
     """
     Find the most suitable referees based on keyword matching
@@ -410,3 +481,24 @@ def match_referees_by_keywords(article_keywords, referees):
     
     # Sort by score in descending order
     return sorted(referee_scores, key=lambda x: x[1], reverse=True)
+
+
+
+def safe_operation(operation_func, error_message, default_return=None, *args, **kwargs):
+    """
+    Wrapper function to execute operations safely within a try-except block
+    
+    Args:
+        operation_func: Function to execute
+        error_message: Message to log if an error occurs
+        default_return: Value to return if the operation fails
+        *args, **kwargs: Arguments to pass to operation_func
+        
+    Returns:
+        Result of operation_func or default_return if an error occurs
+    """
+    try:
+        return operation_func(*args, **kwargs)
+    except Exception as e:
+        logger.error(f"{error_message}: {e}")
+        return default_return

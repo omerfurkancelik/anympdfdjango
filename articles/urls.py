@@ -1,10 +1,12 @@
 from django.urls import path
 from . import views
 import os
+from django.contrib import admin
 
 urlpatterns = [
     # General
     path('', views.home, name='home'),
+    path('admin/', admin.site.urls),
     
     # User section
     path('upload/', views.upload_article, name='upload_article'),
@@ -22,6 +24,9 @@ urlpatterns = [
     path('editor/article/<int:article_id>/anonymize/', views.anonymize_article, name='anonymize_article'),
     path('editor/article/<int:article_id>/download-anonymized/', views.download_anonymized_article, name='download_anonymized_article'),
     path('editor/article/<int:article_id>/suggest-referees/', views.suggest_referees, name='suggest_referees'),
+    path('editor/reset-database/', views.reset_database, name='reset_database'),
+    path('editor/reset-database-orm/', views.reset_database_orm, name='reset_database_orm'),
+    
     
     # Referee section
     path('referees/', views.referee_list, name='referee_list'),

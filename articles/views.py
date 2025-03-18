@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404, HttpResponse
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.core.mail import send_mail
+from django.db import connection
 from django.conf import settings
 from django.urls import reverse
 from django.contrib.auth.models import User
@@ -10,6 +11,7 @@ from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback
 from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm, AddRefereeForm
 
 import os
+import shutil
 
 def is_editor(user):
     return hasattr(user, 'editor')
@@ -382,10 +384,172 @@ def delete_article(request, article_id):
     return render(request, 'articles/editor/delete_confirm.html', {'article': article})
 
 
+def reset_database(request):
+    """
+    Remove all data from the database and media files, then recreate initial admin account.
+    CAUTION: This will delete all data!
+    """
 
+    if request.method == 'POST':
+        # First, confirm the action with a security check
+        confirmation = request.POST.get('confirmation')
+        if confirmation != 'RESET':
+            messages.error(request, "Incorrect confirmation code. Database reset aborted.")
+            return redirect('editor_dashboard')
+        
+        try:
+            # 1. Delete all media files
+            media_root = settings.MEDIA_ROOT
+            
+            # Delete article files
+            articles_dir = os.path.join(media_root, 'articles')
+            if os.path.exists(articles_dir):
+                shutil.rmtree(articles_dir)
+                os.makedirs(articles_dir)  # Recreate empty directory
+                
+            # Delete anonymized article files
+            anon_articles_dir = os.path.join(media_root, 'anonymized_articles')
+            if os.path.exists(anon_articles_dir):
+                shutil.rmtree(anon_articles_dir)
+                os.makedirs(anon_articles_dir)  # Recreate empty directory
+            
+            # 2. Clear database tables (retain structure)
+            with connection.cursor() as cursor:
+                # Get list of all tables
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name!='sqlite_sequence' AND name!='auth_permission' AND name!='auth_group' AND name!='django_content_type' AND name!='django_migrations';")
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # Delete data from each table
+                for table in tables:
+                    cursor.execute(f"DELETE FROM {table};")
+            
+            # 3. Recreate default editor account
+            user = User.objects.create_user(
+                username='editor1',
+                email='editor1@test.com',
+                password='password123'
+            )
+            Editor.objects.create(user=user)
+            
+            messages.success(request, "Database has been reset successfully. A new editor account has been created.")
+            
+            # Log out the user since they're likely deleted
+            from django.contrib.auth import logout
+            logout(request)
+            
+            return redirect('home')
+            
+        except Exception as e:
+            messages.error(request, f"An error occurred during database reset: {str(e)}")
+            return redirect('editor_dashboard')
+    
+    return render(request, 'articles/editor/reset_database.html')
 
+# Alternative implementation using Django's ORM for database reset
 
+def reset_database_orm(request):
+    """
+    Remove all data from the database and media files, then recreate initial admin account.
+    This version uses Django ORM with proper handling of foreign key constraints.
+    """
 
+    if request.method == 'POST':
+        # First, confirm the action with a security check
+        confirmation = request.POST.get('confirmation')
+        if confirmation != 'RESET':
+            messages.error(request, "Incorrect confirmation code. Database reset aborted.")
+            return redirect('editor_dashboard')
+        
+        try:
+            # Save the current user's ID
+            current_user_id = request.user.id
+            is_current_user_editor = hasattr(request.user, 'editor')
+            
+            # 1. Delete all media files
+            media_root = settings.MEDIA_ROOT
+            
+            # Delete article files
+            articles_dir = os.path.join(media_root, 'articles')
+            if os.path.exists(articles_dir):
+                shutil.rmtree(articles_dir)
+                os.makedirs(articles_dir)  # Recreate empty directory
+                
+            # Delete anonymized article files
+            anon_articles_dir = os.path.join(media_root, 'anonymized_articles')
+            if os.path.exists(anon_articles_dir):
+                shutil.rmtree(anon_articles_dir)
+                os.makedirs(anon_articles_dir)  # Recreate empty directory
+            
+            # 2. Clear database using Django ORM with proper order
+            # Turn off foreign key constraints temporarily
+            from django.db import connection
+            with connection.cursor() as cursor:
+                if connection.vendor == 'sqlite':
+                    cursor.execute("PRAGMA foreign_keys = OFF;")
+                elif connection.vendor == 'postgresql':
+                    cursor.execute("SET CONSTRAINTS ALL DEFERRED;")
+                elif connection.vendor == 'mysql':
+                    cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
+                    
+                    
+            print("bura girdi canim")
+            
+            # Delete all data in correct order
+            ChatMessage.objects.all().delete()
+            ArticleFeedback.objects.all().delete()
+            Referee.objects.all().delete()
+            Editor.objects.all().delete()
+            Article.objects.all().delete()
+            
+            # Delete all non-superuser users
+            User.objects.filter(is_superuser=False).delete()
+            
+            # Turn foreign key constraints back on
+            with connection.cursor() as cursor:
+                if connection.vendor == 'sqlite':
+                    cursor.execute("PRAGMA foreign_keys = ON;")
+                elif connection.vendor == 'postgresql':
+                    cursor.execute("SET CONSTRAINTS ALL IMMEDIATE;")
+                elif connection.vendor == 'mysql':
+                    cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
+            
+            # 3. Recreate default editor account
+            
+            try:
+                user = User.objects.create_user(
+                    username='editor1',
+                    email='editor1@test.com',
+                    password='passnord123',
+                )
+            except Exception as e:
+                print(e)
+            
+
+            Editor.objects.create(user=user)
+            
+            messages.success(request, "Database has been reset successfully. A new editor account has been created.")
+            
+            # Check if the current user was deleted
+            if is_current_user_editor:
+                # The current user was an editor, they've been deleted
+                from django.contrib.auth import logout
+                logout(request)
+                return redirect('home')
+            else:
+                # The user might still exist if they're a superuser
+                try:
+                    User.objects.get(id=current_user_id)
+                    return redirect('editor_dashboard')
+                except User.DoesNotExist:
+                    from django.contrib.auth import logout
+                    logout(request)
+                    return redirect('home')
+            
+        except Exception as e:
+            messages.error(request, f"An error occurred during database reset: {str(e)}")
+            return redirect('editor_dashboard')
+    
+    return render(request, 'articles/editor/reset_database.html')
 
 
 
