@@ -8,16 +8,14 @@ from django.urls import reverse
 from django.contrib.auth.models import User
 from django.http import HttpResponseForbidden
 from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback
-from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm, AddRefereeForm
+from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm, AddRefereeForm, ArticleRevisionForm
+from .utils import decrypt_anonymization_map
 
 import os
 import shutil
+import datetime
 
-def is_editor(user):
-    return hasattr(user, 'editor')
 
-def is_referee(user):
-    return hasattr(user, 'referee')
 
 def home(request):
     return render(request, 'articles/home.html')
@@ -60,7 +58,57 @@ def upload_success(request, tracking_code):
 
 def track_article(request):
     article = None
-    if request.method == 'POST':
+    feedback = None
+    
+    # Check if this is a revision submission
+    if request.method == 'POST' and 'submit_revision' in request.POST:
+        # This is a revision submission
+        tracking_code = request.POST.get('tracking_code')
+        email = request.POST.get('email')
+        
+        try:
+            article = Article.objects.get(tracking_code=tracking_code, email=email)
+            
+            if article.status == 'revision_required':
+                revision_form = ArticleRevisionForm(request.POST, request.FILES)
+                if revision_form.is_valid() and 'revised_article' in request.FILES:
+                    # Save the revised file
+                    article.file = request.FILES['revised_article']
+                    article.status = 'submitted'  # Reset to submitted status for re-review
+                    article.save()
+                    
+                    # Create a message to notify about the revision
+                    revision_comments = revision_form.cleaned_data.get('revision_comments', '')
+                    message_content = "Revised version uploaded by author."
+                    if revision_comments:
+                        message_content += f" Comments: {revision_comments}"
+                        
+                    ChatMessage.objects.create(
+                        article=article,
+                        sender_email=email,
+                        content=message_content
+                    )
+                    
+                    messages.success(request, "Your revised article has been successfully uploaded.")
+                    return redirect('track_article')
+                else:
+                    if 'revised_article' not in request.FILES:
+                        messages.error(request, "Please select a file to upload.")
+            else:
+                messages.error(request, "This article does not require revision.")
+                
+            # Get the latest feedback for this article
+            feedback = ArticleFeedback.objects.filter(article=article).order_by('-created_at').first()
+            form = ArticleTrackingForm(initial={'tracking_code': tracking_code, 'email': email})
+            revision_form = ArticleRevisionForm()
+            
+        except Article.DoesNotExist:
+            messages.error(request, 'No article found with the provided tracking code and email.')
+            form = ArticleTrackingForm()
+            revision_form = ArticleRevisionForm()
+    
+    # Normal article tracking
+    elif request.method == 'POST':
         form = ArticleTrackingForm(request.POST)
         if form.is_valid():
             tracking_code = form.cleaned_data['tracking_code']
@@ -68,13 +116,26 @@ def track_article(request):
             
             try:
                 article = Article.objects.get(tracking_code=tracking_code, email=email)
+                # Get the latest feedback for this article
+                feedback = ArticleFeedback.objects.filter(article=article).order_by('-created_at').first()
+                revision_form = ArticleRevisionForm()
             except Article.DoesNotExist:
                 messages.error(request, 'No article found with the provided tracking code and email.')
+                revision_form = ArticleRevisionForm()
+        else:
+            revision_form = ArticleRevisionForm()
     else:
         form = ArticleTrackingForm()
+        revision_form = ArticleRevisionForm()
         
-    return render(request, 'articles/user/track.html', {'form': form, 'article': article})
-
+    return render(request, 'articles/user/track.html', {
+        'form': form, 
+        'article': article,
+        'feedback': feedback,
+        'revision_form': revision_form
+    })
+    
+    
 def article_chat(request, tracking_code):
     article = get_object_or_404(Article, tracking_code=tracking_code)
     
@@ -107,33 +168,198 @@ def editor_dashboard(request):
     articles = Article.objects.all().order_by('-submission_date')
     return render(request, 'articles/editor/dashboard.html', {'articles': articles})
 
+
+
+def referee_quick_action(request, article_id, referee_id):
+    """
+    Quick action for referee to accept or request revision for an article
+    """
+
+    referee = get_object_or_404(Referee, id=referee_id)
+    
+    article = get_object_or_404(Article, id=article_id, referee=referee)
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'accept':
+            # Change status to accepted
+            article.status = 'accepted'
+            article.save()
+            
+            # Create feedback record if it doesn't exist yet
+            feedback, created = ArticleFeedback.objects.get_or_create(
+                article=article, 
+                referee=referee,
+                defaults={
+                    'comments': 'Article accepted via quick action.',
+                    'recommendation': 'accept'
+                }
+            )
+            
+            # If feedback already existed, update it
+            if not created:
+                feedback.recommendation = 'accept'
+                feedback.save()
+            
+            # Create system message
+            # ChatMessage.objects.create(
+            #     article=article,
+            #     sender_user=request.user,
+            #     content=f"Article accepted by referee: {referee.user.username}"
+            # )
+            
+            messages.success(request, f"Article {article.tracking_code} has been accepted.")
+        
+        elif action == 'revise':
+            # Change status to revision required
+            article.status = 'revision_required'
+            article.save()
+            
+            # Create feedback record if it doesn't exist yet
+            feedback, created = ArticleFeedback.objects.get_or_create(
+                article=article, 
+                referee=referee,
+                defaults={
+                    'comments': 'Revision requested via quick action. Please see editor for details.',
+                    'recommendation': 'revise'
+                }
+            )
+            
+            # If feedback already existed, update it
+            if not created:
+                feedback.recommendation = 'revise'
+                feedback.save()
+            
+            # Create system message
+            ChatMessage.objects.create(
+                article=article,
+                sender_user=request.user,
+                content=f"Revision requested by referee: {referee.user.username}"
+            )
+            
+            messages.success(request, f"Revision has been requested for article {article.tracking_code}.")
+        
+        else:
+            messages.error(request, "Invalid action specified.")
+    
+    return redirect('referee_dashboard', referee_id=referee.id)
+
+
 def assign_referee(request, article_id):
+    """
+    Assign a referee to an article with checks for anonymization
+    """
+
     
     article = get_object_or_404(Article, id=article_id)
     referees = Referee.objects.all()
+    
+    # For suggested referees, get top matches based on keywords
+    suggested_referees = []
+    if article.extracted_keywords:
+        article_keywords = article.get_extracted_keywords_list()
+        suggested_referees = match_referees_by_keywords(article_keywords, referees)
     
     if request.method == 'POST':
         referee_id = request.POST.get('referee')
         if referee_id:
             referee = get_object_or_404(Referee, id=referee_id)
+            
+            # Check if article is anonymized - if not, show a warning
+            if not article.is_anonymized:
+                messages.warning(request, "Note: This article has not been anonymized. The referee will see all author information.")
+            
             article.referee = referee
             article.status = 'under_review'
             article.save()
             
-            # Optional: Send notification to the referee
-            # send_referee_notification(referee, article)
+            # Create a system message to log the assignment
+            """ChatMessage.objects.create(
+                article=article,
+                sender_user=request.user,
+                content=f"Article assigned to referee: {referee.user.username}"
+            )"""
             
             messages.success(request, f"Article {article.tracking_code} has been assigned to {referee.user.username}")
             return redirect('editor_dashboard')
         else:
             messages.error(request, "Please select a referee")
     
-    return render(request, 'articles/editor/assign_referee.html', {
-        'article': article,
-        'referees': referees
-    })
+    # Check if there's a suggested referee in the query params
+    suggested_referee_id = request.GET.get('referee')
+    if suggested_referee_id:
+        try:
+            # Pre-select this referee in the form
+            suggested_referee = Referee.objects.get(id=suggested_referee_id)
+            context = {
+                'article': article,
+                'referees': referees,
+                'preselected_referee': suggested_referee,
+                'suggested_referees': suggested_referees
+            }
+        except Referee.DoesNotExist:
+            context = {
+                'article': article,
+                'referees': referees,
+                'suggested_referees': suggested_referees
+            }
+    else:
+        context = {
+            'article': article,
+            'referees': referees,
+            'suggested_referees': suggested_referees
+        }
+    
+    return render(request, 'articles/editor/assign_referee.html', context)
+
+def restore_article_info(request, article_id):
+
+   
+    
+    article = get_object_or_404(Article, id=article_id)
+    
+    # Get anonymization key from the article
+    if not article.anonymization_key:
+        messages.error(request, "This article has not been anonymized.")
+        return redirect('editor_review', article_id=article.id)
+    
+    # Get anonymization map
+    anon_map = article.get_anonymization_map()
+    
+    try:
+        # Decrypt the anonymization map
+        reverse_map, cipher = decrypt_anonymization_map(anon_map, article.anonymization_key)
+        
+        # Organize the information for display
+        authors = []
+        institutions = []
+        
+        for encrypted, original in reverse_map.items():
+            # Try to decrypt each entry
+            try:
+                decrypted = cipher.decrypt(encrypted)
+                if decrypted == original:  # This is an author or institution
+                    if any(term in original.lower() for term in ['university', 'institute', 'college', 'department']):
+                        institutions.append((encrypted, original))
+                    else:
+                        authors.append((encrypted, original))
+            except:
+                # Skip if decryption fails
+                continue
+        
+        return render(request, 'articles/editor/restore_info.html', {
+            'article': article,
+            'authors': authors,
+            'institutions': institutions
+        })
+    
+    except Exception as e:
+        messages.error(request, f"Error decrypting information: {e}")
+        return redirect('editor_review', article_id=article.id)
 
 def editor_review(request, article_id):
+
     
     article = get_object_or_404(Article, id=article_id)
     all_referees = Referee.objects.all()
@@ -142,7 +368,13 @@ def editor_review(request, article_id):
     assigned_referee = article.referee
     
     # Get feedback for this article
-    feedback = ArticleFeedback.objects.filter(article=article)
+    feedback = ArticleFeedback.objects.filter(article=article).order_by('-created_at')
+    
+    # Get revision history messages
+    revision_messages = ChatMessage.objects.filter(
+        article=article, 
+        content__contains="Revised version uploaded"
+    ).order_by('-timestamp')
     
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -152,16 +384,23 @@ def editor_review(request, article_id):
             if new_status in [status[0] for status in Article.STATUS_CHOICES]:
                 article.status = new_status
                 article.save()
+                
+                # Create a system message to log the status change
+                ChatMessage.objects.create(
+                    article=article,
+                    sender_user=request.user,
+                    content=f"Article status updated to {article.get_status_display()}"
+                )
+                
                 messages.success(request, f"Article status updated to {article.get_status_display()}")
                 return redirect('editor_review', article_id=article.id)
-        
-        # The referee assignment is now handled in the assign_referee view
-        
+    
     return render(request, 'articles/editor/review.html', {
         'article': article,
         'all_referees': all_referees,
         'assigned_referee': assigned_referee,
-        'feedback': feedback
+        'feedback': feedback,
+        'revision_messages': revision_messages
     })
 
 def editor_chat(request, article_id):
@@ -255,8 +494,93 @@ def referee_dashboard(request, referee_id=None):
     }
     return render(request, 'articles/referee/dashboard.html', context)
 
+
+
+def process_article_metadata(request, article_id):
+    """Extract metadata from an article using NLP and anonymize using AES encryption"""
+
+    
+    article = get_object_or_404(Article, id=article_id)
+    
+    if request.method == 'POST':
+        action = request.POST.get('action', 'extract')
+        
+        if action == 'extract':
+            # Extract text from PDF
+            pdf_path = article.file.path
+            text = extract_text_from_pdf(pdf_path)
+            
+            # Extract metadata using NLP
+            authors = extract_authors(text)
+            institutions = extract_institutions(text)
+            keywords = extract_keywords(text)
+            
+            # Save extracted metadata
+            article.extracted_authors = '|'.join(authors)
+            article.extracted_institutions = '|'.join(institutions)
+            article.extracted_keywords = '|'.join(keywords)
+            article.save()
+            
+            messages.success(request, "Article metadata extracted successfully.")
+            return redirect('process_article_metadata', article_id=article.id)
+            
+        elif action == 'anonymize':
+            # Get authors and institutions to anonymize
+            authors_to_anonymize = request.POST.getlist('authors')
+            institutions_to_anonymize = request.POST.getlist('institutions')
+            
+            # Create anonymization map using AES encryption
+            anon_map, encryption_key = create_anonymization_map(
+                authors_to_anonymize, 
+                institutions_to_anonymize
+            )
+            
+            # Save anonymization map and key to the article
+            article.set_anonymization_map(anon_map)
+            article.anonymization_key = encryption_key
+            
+            # Create anonymized PDF
+            if anon_map:
+                pdf_path = article.file.path
+                anonymized_path = anonymize_pdf(pdf_path, anon_map)
+                
+                if anonymized_path:
+                    # Save anonymized file to the article
+                    with open(anonymized_path, 'rb') as f:
+                        article.anonymized_file.save(
+                            f"anonymized_{os.path.basename(article.file.name)}", 
+                            ContentFile(f.read())
+                        )
+                    
+                    # Clean up temporary file
+                    os.remove(anonymized_path)
+                    
+                    article.is_anonymized = True
+                    article.save()
+                    
+                    messages.success(request, "Article anonymized successfully with AES encryption.")
+                else:
+                    messages.error(request, "Failed to anonymize article.")
+            else:
+                messages.warning(request, "No items selected for anonymization.")
+            
+            return redirect('editor_review', article_id=article.id)
+    
+    # Prepare data for template
+    context = {
+        'article': article,
+        'authors': article.get_extracted_authors_list(),
+        'institutions': article.get_extracted_institutions_list(),
+        'keywords': article.get_extracted_keywords_list()
+    }
+    
+    return render(request, 'articles/editor/process_metadata.html', context)
+
 # Update the referee_review view to work with the new dashboard
 def referee_review(request, article_id, referee_id=None):
+    """
+    View for referee to review an article and submit feedback
+    """
     try:
         if referee_id:
             referee = get_object_or_404(Referee, id=referee_id)
@@ -283,6 +607,34 @@ def referee_review(request, article_id, referee_id=None):
             feedback.referee = referee
             feedback.save()
             
+            # Update article status based on recommendation
+            recommendation = form.cleaned_data.get('recommendation')
+            if recommendation == 'revise':
+                article.status = 'revision_required'
+                article.save()
+                # Add a system message about the status change
+                # ChatMessage.objects.create(
+                #     article=article,
+                #     sender_user=request.user,
+                #     content=f"Status changed to Revision Required based on referee recommendation."
+                # )
+            elif recommendation == 'accept':
+                article.status = 'accepted'
+                article.save()
+                # ChatMessage.objects.create(
+                #     article=article,
+                #     sender_user=request.user,
+                #     content=f"Status changed to Accepted based on referee recommendation."
+                # )
+            elif recommendation == 'reject':
+                article.status = 'rejected'
+                article.save()
+                # ChatMessage.objects.create(
+                #     article=article,
+                #     sender_user=request.user,
+                #     content=f"Status changed to Rejected based on referee recommendation."
+                # )
+            
             # Notify editor about new feedback
             editors = article.editors.all()
             for editor in editors:
@@ -299,7 +651,7 @@ def referee_review(request, article_id, referee_id=None):
                 """
                 #send_mail(subject, message, settings.EMAIL_HOST_USER, [editor.user.email])
             
-            messages.success(request, 'Your feedback has been submitted')
+            messages.success(request, 'Your feedback has been submitted and the article status has been updated.')
             return redirect('referee_dashboard', referee_id=referee.id)
     else:
         form = ArticleFeedbackForm(instance=feedback)
@@ -597,30 +949,6 @@ from django.core.files.base import ContentFile
 import os
 import json
 
-def process_article_metadata(request, article_id):
-    """Extract metadata from an article using NLP"""
-    article = get_object_or_404(Article, id=article_id)
-    
-    if request.method == 'POST':
-        # 1) PDF’den metni okuyalım
-        pdf_path = article.file.path
-        text = extract_text_from_pdf(pdf_path)
-        
-        # 2) NLP fonksiyonlarıyla yazar, kurum, keyword çıkar
-        authors = extract_authors(text)
-        institutions = extract_institutions(text)
-        keywords = extract_keywords(text)
-        
-        # 3) Model alanlarına kaydet (örnek: '|' ile birleştirme)
-        article.extracted_authors = '|'.join(authors)
-        article.extracted_institutions = '|'.join(institutions)
-        article.extracted_keywords = '|'.join(keywords)
-        
-        article.save()
-        messages.success(request, "Article metadata extracted successfully.")
-        return redirect('editor_review', article_id=article.id)
-    
-    return render(request, 'articles/editor/process_metadata.html', {'article': article})
 
 
 def anonymize_article(request, article_id):

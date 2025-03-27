@@ -31,21 +31,31 @@
                 </div>
             </div>
             
-            <!-- Article Preview & Download -->
-            <div class="bg-gray-100 p-4 rounded-lg mb-6">
-                <h2 class="text-lg font-bold mb-4 text-gray-800">Article File</h2>
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <i class="fas fa-file-pdf text-red-500 text-2xl mr-3"></i>
-                        <span class="text-gray-800">{{ article.file.name|cut:"articles/" }}</span>
+            <!-- Anonymization Information -->
+            {% if article.is_anonymized %}
+            <div class="bg-yellow-50 p-4 rounded-lg mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-user-secret text-yellow-500 text-xl"></i>
                     </div>
-                    <a href="{% url 'download_article' article.id %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                        <i class="fas fa-download mr-2"></i> Download
-                    </a>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-yellow-800">Anonymized Article</h3>
+                        <div class="mt-2 text-sm text-yellow-700">
+                            <p>
+                                This article has been anonymized to remove author and institution information.
+                                You can download the anonymized version below.
+                            </p>
+                            <div class="mt-3">
+                                <a href="{% url 'download_anonymized_article' article.id %}" class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-yellow-800 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                                    <i class="fas fa-download mr-1"></i> Download Anonymized Version
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-
+            {% endif %}
+            
             <!-- Article Keywords (if available) -->
             {% if article.extracted_keywords %}
             <div class="bg-gray-100 p-4 rounded-lg mb-6">
@@ -59,54 +69,100 @@
                 </div>
             </div>
             {% endif %}
-
-            {% if article.is_anonymized %}
-            <div class="bg-yellow-100 p-4 rounded-lg mb-6">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-user-secret text-yellow-500 text-xl"></i>
+            
+            <!-- Article Preview & Download -->
+            <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                <h2 class="text-lg font-bold mb-4 text-gray-800">Article File</h2>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-file-pdf text-red-500 text-2xl mr-3"></i>
+                        <span class="text-gray-800">{{ article.file.name|cut:"articles/" }}</span>
                     </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-yellow-800">Anonymized Article</h3>
-                        <div class="mt-2 text-sm text-yellow-700">
-                            <p>
-                                This article has been anonymized to remove author and institution information.
-                                You can download the anonymized version below. 
-                            </p>
-                            <div class="mt-3">
-                                <a href="{% url 'download_anonymized_article' article.id %}" class="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-yellow-800 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
-                                    <i class="fas fa-download mr-1"></i> Download Anonymized Version
-                                </a>
-                                <a href="{% url 'restore_article_info' article.id article.referee.id %}" class="ml-2 inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-indigo-600 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                    <i class="fas fa-eye mr-1"></i> View Original Information
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+                    <a href="{% url 'download_article' article.id %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                        <i class="fas fa-download mr-2"></i> Download
+                    </a>
                 </div>
             </div>
-            {% endif %}
-
             
+            <!-- Recommendation Guidance - Hidden by default, shown by JavaScript -->
+            <div id="recommendation-guidance" class="hidden mb-6">
+                <div id="accept-guidance" class="hidden bg-green-50 p-4 rounded-lg">
+                    <h3 class="font-medium text-green-800">Acceptance Guidance</h3>
+                    <p class="text-sm text-green-700 mt-1">
+                        Consider accepting the article if it is of high quality, presents original and significant work, 
+                        has sound methodology, and requires no or only minor revisions.
+                    </p>
+                </div>
+                
+                <div id="revise-guidance" class="hidden bg-orange-50 p-4 rounded-lg">
+                    <h3 class="font-medium text-orange-800">Revision Guidance</h3>
+                    <p class="text-sm text-orange-700 mt-1">
+                        Recommend revision if the article has merit but requires substantive changes such as
+                        additional experiments, improved analysis, or clearer presentation. Be specific about 
+                        required changes in your comments.
+                    </p>
+                </div>
+                
+                <div id="reject-guidance" class="hidden bg-red-50 p-4 rounded-lg">
+                    <h3 class="font-medium text-red-800">Rejection Guidance</h3>
+                    <p class="text-sm text-red-700 mt-1">
+                        Consider rejection for work with fundamental flaws in methodology, insufficient originality,
+                        or other major issues that would require a complete rewrite. Provide constructive feedback
+                        on how the authors might improve their work.
+                    </p>
+                </div>
+            </div>
             
-            <!-- Referee Feedback Form -->
-            <form method="post" class="mb-6" autocomplete="false">
+            <!-- Referee Assignment & Status Update Form -->
+            <form method="post" class="mb-6">
                 {% csrf_token %}
-                {{ form|crispy }}
-
-                <button
-                type="submit"
-                class="bg-blue-600 text-white font-semibold py-2 px-4 rounded hover:bg-blue-700 transition-colors"
-                >
-                Submit Feedback
-                </button>
+                
+                <div class="space-y-6">
+                    {{ form.comments|as_crispy_field }}
+                    
+                    {{ form.recommendation|as_crispy_field }}
+                    
+                    <button
+                    type="submit"
+                    class="bg-blue-600 text-white font-semibold py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+                    >
+                    Submit Feedback
+                    </button>
+                </div>
             </form>
-            
         </div>
     </div>
 </div>
 
+{% block extra_scripts %}
+<script>
+function showRecommendationGuidance(value) {
+    // Hide all guidance divs
+    document.getElementById('accept-guidance').classList.add('hidden');
+    document.getElementById('revise-guidance').classList.add('hidden');
+    document.getElementById('reject-guidance').classList.add('hidden');
+    
+    // Show the guidance container
+    document.getElementById('recommendation-guidance').classList.remove('hidden');
+    
+    // Show the appropriate guidance based on selection
+    if (value === 'accept') {
+        document.getElementById('accept-guidance').classList.remove('hidden');
+    } else if (value === 'revise') {
+        document.getElementById('revise-guidance').classList.remove('hidden');
+    } else if (value === 'reject') {
+        document.getElementById('reject-guidance').classList.remove('hidden');
+    }
+}
 
-<!-- Anonymization Information -->
+// Initialize guidance if form is pre-filled
+document.addEventListener('DOMContentLoaded', function() {
+    const recommendationSelect = document.querySelector('select[name="recommendation"]');
+    if (recommendationSelect && recommendationSelect.value) {
+        showRecommendationGuidance(recommendationSelect.value);
+    }
+});
+</script>
+{% endblock %}
 
 {% endblock %}

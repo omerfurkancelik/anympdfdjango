@@ -1,4 +1,5 @@
 {% extends 'articles/base.html' %}
+{% load crispy_forms_tags %}
 
 {% block content %}
 <div class="max-w-5xl mx-auto">
@@ -12,14 +13,15 @@
                 </a>
             </div>
             
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6">
                 <div class="flex">
                     <div class="flex-shrink-0">
-                        <i class="fas fa-info-circle text-yellow-500"></i>
+                        <i class="fas fa-info-circle text-indigo-500"></i>
                     </div>
                     <div class="ml-3">
-                        <p class="text-sm text-yellow-700">
-                            This process will extract authors, institutions, and keywords from the article using Natural Language Processing. The extracted information can then be used for anonymization and referee assignment.
+                        <p class="text-sm text-indigo-700">
+                            This tool extracts authors, institutions, and keywords from the article using Natural Language Processing, 
+                            then allows you to anonymize the article using AES encryption for double-blind review.
                         </p>
                     </div>
                 </div>
@@ -36,23 +38,6 @@
                     <div class="sm:col-span-1">
                         <dt class="text-sm font-medium text-gray-500">Submission Date</dt>
                         <dd class="mt-1 text-sm text-gray-900">{{ article.submission_date|date:"M d, Y" }}</dd>
-                    </div>
-                    <div class="sm:col-span-1">
-                        <dt class="text-sm font-medium text-gray-500">Author Email</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ article.email }}</dd>
-                    </div>
-                    <div class="sm:col-span-1">
-                        <dt class="text-sm font-medium text-gray-500">Status</dt>
-                        <dd class="mt-1 text-sm">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                {% if article.status == 'submitted' %}bg-blue-100 text-blue-800
-                                {% elif article.status == 'under_review' %}bg-yellow-100 text-yellow-800
-                                {% elif article.status == 'revision_required' %}bg-orange-100 text-orange-800
-                                {% elif article.status == 'accepted' %}bg-green-100 text-green-800
-                                {% elif article.status == 'rejected' %}bg-red-100 text-red-800{% endif %}">
-                                {{ article.get_status_display }}
-                            </span>
-                        </dd>
                     </div>
                     {% if article.title %}
                     <div class="sm:col-span-2">
@@ -72,18 +57,140 @@
                 </dl>
             </div>
             
-            <!-- Process Button -->
-            <form method="post" class="mt-6" autocomplete="false">
-                {% csrf_token %}
-                <div class="flex justify-center">
-                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        <i class="fas fa-magic mr-2"></i> Extract Metadata
-                    </button>
-                </div>
-                <p class="text-center text-sm text-gray-500 mt-2">
-                    This process may take a few seconds
+            {% if not authors and not institutions and not keywords %}
+            <!-- If no metadata extracted yet, show extraction form -->
+            <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Extract Metadata</h2>
+                <p class="text-sm text-gray-600 mb-4">
+                    Click the button below to extract authors, institutions, and keywords from the article
+                    using Natural Language Processing.
                 </p>
-            </form>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="extract">
+                    <div class="flex justify-center">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <i class="fas fa-magic mr-2"></i> Extract Metadata
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% else %}
+            <!-- If metadata extracted, show anonymization form -->
+            <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Extracted Metadata</h2>
+                
+                <form method="post" class="space-y-6">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="anonymize">
+                    
+                    <!-- Authors Section -->
+                    <div>
+                        <h3 class="text-md font-medium text-gray-700 mb-3">Authors</h3>
+                        {% if authors %}
+                        <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <ul class="divide-y divide-gray-200">
+                                {% for author in authors %}
+                                <li class="p-4">
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input id="author-{{ forloop.counter }}" name="authors" value="{{ author }}" type="checkbox" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="author-{{ forloop.counter }}" class="font-medium text-gray-700">{{ author }}</label>
+                                            <p class="text-gray-500">Will be encrypted with AES</p>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-gray-500">No authors detected.</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Institutions Section -->
+                    <div>
+                        <h3 class="text-md font-medium text-gray-700 mb-3">Institutions</h3>
+                        {% if institutions %}
+                        <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <ul class="divide-y divide-gray-200">
+                                {% for institution in institutions %}
+                                <li class="p-4">
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input id="institution-{{ forloop.counter }}" name="institutions" value="{{ institution }}" type="checkbox" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="institution-{{ forloop.counter }}" class="font-medium text-gray-700">{{ institution }}</label>
+                                            <p class="text-gray-500">Will be encrypted with AES</p>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-gray-500">No institutions detected.</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Keywords Section (for display only) -->
+                    <div>
+                        <h3 class="text-md font-medium text-gray-700 mb-3">Keywords</h3>
+                        {% if keywords %}
+                        <div class="flex flex-wrap gap-2">
+                            {% for keyword in keywords %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                {{ keyword }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-gray-500">No keywords detected.</p>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-shield-alt text-indigo-500"></i>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-indigo-700">
+                                    <strong>AES Encryption:</strong> Selected authors and institutions will be encrypted using AES-256 
+                                    in the anonymized PDF. Only editors will be able to decrypt the information. Referees will see 
+                                    the encrypted values.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-center">
+                        <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <i class="fas fa-user-secret mr-2"></i> Anonymize with AES Encryption
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+            
+            {% if article.is_anonymized %}
+            <div class="bg-green-50 border-l-4 border-green-400 p-4 mt-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-check-circle text-green-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-green-700">
+                            This article has been anonymized with AES encryption. <a href="{% url 'download_anonymized_article' article.id %}" class="font-medium underline">Download anonymized version</a>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             
         </div>
     </div>
