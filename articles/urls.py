@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views  # Bu satır önemli, tüm views'leri import ediyoruz
 import os
 from django.contrib import admin
 
@@ -13,6 +13,7 @@ urlpatterns = [
     path('upload/success/<str:tracking_code>/', views.upload_success, name='upload_success'),
     path('track/', views.track_article, name='track_article'),
     path('article/chat/<str:tracking_code>/', views.article_chat, name='article_chat'),
+    path('update-article/<str:tracking_code>/', views.update_article_file, name='update_article_file'),
     
     # Editor section
     path('editor/dashboard/', views.editor_dashboard, name='editor_dashboard'),

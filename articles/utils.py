@@ -50,7 +50,7 @@ def extract_text_from_pdf(pdf_path):
     """
     text = []
     try:
-        with fitz.open(pdf_path) as doc:
+        with fitz.open(pdf_path) as doc: #PDF i açar
             for page in doc:
                 text.append(page.get_text())
         return "\n".join(text)
@@ -59,11 +59,11 @@ def extract_text_from_pdf(pdf_path):
         return ""
         
         
-    with open("denemetext.txt","w",encoding="utf-8") as f:
+    with open("denemetext.txt","w",encoding="utf-8") as f: #Bu kısım çalışmıyor
         f.write(text)
     return text
 
-def extract_authors(text):
+def extract_authors(text): #Yazarları çıkaran fonksiyon (geliştirilecek)
     """
     Metinden potansiyel yazar isimlerini çıkarmaya çalışır.
     1) 'AUTHORS?' veya 'by' gibi kalıpları yakalar.
