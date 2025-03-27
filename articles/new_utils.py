@@ -9,7 +9,6 @@ from django.core.files.base import ContentFile
 import logging
 import fitz  # PyMuPDF
 import io
-import base64,hashlib
 from PIL import Image, ImageDraw, ImageFilter
 import tempfile
 import numpy as np
@@ -43,6 +42,15 @@ except:
     subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
     
+    
+    
+import os
+import base64
+import hashlib
+import logging
+import binascii
+
+logger = logging.getLogger(__name__)
 
 class AES:
     """
@@ -152,8 +160,7 @@ class AES:
             key (bytes): The encryption key
             
         Returns:
-            list: The expanded key schedule as a list of individual bytes
-                arranged in 4-byte chunks (words)
+            list: The expanded key schedule
         """
         # Convert key to list of bytes
         key_bytes = list(key)
@@ -166,7 +173,6 @@ class AES:
         
         # Copy original key bytes to first Nk words
         for i in range(self.Nk):
-            # Each word is 4 bytes
             w[i] = key_bytes[4*i:4*i+4]
         
         # Generate the rest of the expanded key
@@ -179,22 +185,8 @@ class AES:
             elif self.Nk > 6 and i % self.Nk == 4:
                 temp = self.sub_word(temp)
             
-            # Make sure w[i-self.Nk] is a list of integers
-            prev_word = w[i-self.Nk]
-            if not isinstance(prev_word, list):
-                # If somehow prev_word is not a list, convert it
-                prev_word = [prev_word >> 24 & 0xFF, prev_word >> 16 & 0xFF, 
-                            prev_word >> 8 & 0xFF, prev_word & 0xFF]
-            
-            # XOR with previous word
-            w[i] = [(prev_word[j] ^ temp[j]) for j in range(4)]
+            w[i] = [w[i-self.Nk][j] ^ temp[j] for j in range(4)]
         
-        # Ensure all words are lists of integers
-        for i in range(len(w)):
-            if not isinstance(w[i], list):
-                w[i] = [w[i] >> 24 & 0xFF, w[i] >> 16 & 0xFF, 
-                        w[i] >> 8 & 0xFF, w[i] & 0xFF]
-                
         return w
     
     def add_round_key(self, state, round_key):
@@ -203,31 +195,14 @@ class AES:
         
         Args:
             state (list): 4x4 state matrix
-            round_key (list): The round key (list of lists of 4 bytes each)
+            round_key (list): The round key
             
         Returns:
             list: Updated state matrix
         """
-        # Make sure round_key is properly formatted
-        # Each word in round_key should be a list of 4 bytes
-        # We need 4 words for a round key (16 bytes total)
-        
-        # Create a flattened version of the round key if needed
-        flat_key = []
-        for word in round_key:
-            if isinstance(word, list):
-                flat_key.extend(word)  # If word is already a list, extend flat_key with it
-            else:
-                # If somehow word is not a list, convert it to a list of 4 bytes
-                flat_key.extend([word >> 24 & 0xFF, word >> 16 & 0xFF, word >> 8 & 0xFF, word & 0xFF])
-        
-        # Now XOR the state with the flattened key
         for i in range(4):
             for j in range(4):
-                # Make sure we're XORing integers, not lists
-                key_byte = flat_key[i + 4*j] if i + 4*j < len(flat_key) else 0
-                state[i][j] ^= key_byte
-        
+                state[i][j] ^= round_key[i + 4*j]
         return state
     
     def sub_bytes(self, state):
@@ -430,28 +405,20 @@ class AES:
         # Convert plaintext to state matrix
         state = self.bytes_to_state(plaintext)
         
-        # Prepare round keys - each round needs 16 bytes (4 words)
-        round_keys = []
-        for round_num in range(self.rounds + 1):
-            # Extract 4 words (16 bytes) for this round
-            start_idx = 4 * round_num
-            round_key = self.key_schedule[start_idx:start_idx + 4]
-            round_keys.append(round_key)
-        
         # Initial round key addition
-        state = self.add_round_key(state, round_keys[0])
+        state = self.add_round_key(state, self.key_schedule[0:4])
         
         # Main rounds
         for round_num in range(1, self.rounds):
             state = self.sub_bytes(state)
             state = self.shift_rows(state)
             state = self.mix_columns(state)
-            state = self.add_round_key(state, round_keys[round_num])
+            state = self.add_round_key(state, self.key_schedule[4*round_num:4*(round_num+1)])
         
         # Final round (no mix columns)
         state = self.sub_bytes(state)
         state = self.shift_rows(state)
-        state = self.add_round_key(state, round_keys[self.rounds])
+        state = self.add_round_key(state, self.key_schedule[4*self.rounds:4*(self.rounds+1)])
         
         # Convert state matrix back to bytes
         return self.state_to_bytes(state)
@@ -472,28 +439,20 @@ class AES:
         # Convert ciphertext to state matrix
         state = self.bytes_to_state(ciphertext)
         
-        # Prepare round keys - each round needs 16 bytes (4 words)
-        round_keys = []
-        for round_num in range(self.rounds + 1):
-            # Extract 4 words (16 bytes) for this round
-            start_idx = 4 * round_num
-            round_key = self.key_schedule[start_idx:start_idx + 4]
-            round_keys.append(round_key)
-        
         # Initial round key addition (with last round key)
-        state = self.add_round_key(state, round_keys[self.rounds])
+        state = self.add_round_key(state, self.key_schedule[4*self.rounds:4*(self.rounds+1)])
         
         # Main rounds in reverse
         for round_num in range(self.rounds-1, 0, -1):
             state = self.inv_shift_rows(state)
             state = self.inv_sub_bytes(state)
-            state = self.add_round_key(state, round_keys[round_num])
+            state = self.add_round_key(state, self.key_schedule[4*round_num:4*(round_num+1)])
             state = self.inv_mix_columns(state)
         
         # Final round (reverse of initial round)
         state = self.inv_shift_rows(state)
         state = self.inv_sub_bytes(state)
-        state = self.add_round_key(state, round_keys[0])
+        state = self.add_round_key(state, self.key_schedule[0:4])
         
         # Convert state matrix back to bytes
         return self.state_to_bytes(state)
@@ -597,7 +556,6 @@ class AESCipher:
         
         except Exception as e:
             logger.error(f"Encryption error: {e}")
-            print(e)
             # Return a placeholder if encryption fails
             return f"[ENC_ERROR_{text}]"
     
@@ -664,7 +622,54 @@ class AESCipher:
     
     
     
+
+
+
+def create_anonymization_map(authors, institutions):
+    """
+    Create a mapping of original text to AES encrypted text
+    Returns a dictionary {original: encrypted}
+    """
+    # Create a new AES cipher instance
+    cipher = AESCipher()
     
+    # Get the key for storage
+    encryption_key = cipher.get_key_hex()
+    
+    anon_map = {}
+    
+    # Encrypt authors
+    for idx, author in enumerate(authors):
+        encrypted_author = cipher.encrypt(author)
+        anon_map[author] = encrypted_author
+    
+    # Encrypt institutions
+    for idx, institution in enumerate(institutions):
+        encrypted_institution = cipher.encrypt(institution)
+        anon_map[institution] = encrypted_institution
+    
+    # Return both the map and the key
+    return anon_map, encryption_key
+
+
+def decrypt_anonymization_map(anon_map, encryption_key):
+    """
+    Decrypt an anonymization map using the provided key
+    Returns a dictionary {encrypted: original}
+    """
+    # Create AES cipher instance from the key
+    cipher = AESCipher.from_key_hex(encryption_key)
+    
+    # Create a reverse mapping (encrypted to original)
+    reverse_map = {}
+    
+    for original, encrypted in anon_map.items():
+        # Store in reverse order for decryption
+        reverse_map[encrypted] = original
+    
+    return reverse_map, cipher
+    
+
 def extract_text_from_pdf(pdf_path):
     """
     PDF'den metin okuyan basit bir fonksiyon örneği.
@@ -846,97 +851,86 @@ def extract_keywords(text, min_keywords=3, max_keywords=10):
     logger.info(f"[extract_keywords] Found keywords: {final_kws}")
     return final_kws
 
-def decrypt_anonymization_map(anon_map, encryption_key):
-    """
-    Decrypt an anonymization map using the provided key
-    Returns a dictionary {encrypted: original}
-    """
-    # Create AES cipher instance from the key
-    cipher = AESCipher.from_key_hex(encryption_key)
-    
-    # Create a reverse mapping (encrypted to original)
-    reverse_map = {}
-    
-    for original, encrypted in anon_map.items():
-        # Store in reverse order for decryption
-        reverse_map[encrypted] = original
-    
-    return reverse_map, cipher
-
 def anonymize_pdf(pdf_path, anonymize_map):
     """
-    1) Metin redaksiyonu (search_for -> add_redact_annot -> apply_redactions).
-    2) Her sayfadaki gömülü resimleri bularak yüzleri bulanıklaştırır.
-    3) İşlenmiş PDF'yi geçici bir dosyaya kaydedip onun path'ini döndürür.
+    Create an anonymized version of the PDF where author and institution names
+    are replaced with their AES encrypted versions
+    
+    Args:
+        pdf_path (str): Path to the original PDF
+        anonymize_map (dict): Dictionary mapping original text to encrypted text
+    
+    Returns:
+        str: Path to the anonymized PDF
     """
     try:
-        import fitz
-        
+        # Create a temporary file for the anonymized PDF
         temp_fd, temp_path = tempfile.mkstemp(suffix='.pdf')
         os.close(temp_fd)
         
+        # Open the PDF
         doc = fitz.open(pdf_path)
         
-        # -------------------------------------------------
-        # A) METİN REDAKSİYONU
-        # -------------------------------------------------
+        # Process each page
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             
-            # 1) Metin anonimleştirme (redaction)
-            for original, replacement in anonymize_map.items():
-                # Tüm eşleşmeleri bul
+            # 1. Text anonymization - this is the most reliable part
+            for original, encrypted in anonymize_map.items():
+                # Search for text instances and replace them
                 text_instances = page.search_for(original)
                 for inst in text_instances:
-                    annot = page.add_redact_annot(inst, text=replacement, fill=(1,1,1))
-                # Redaction uygula
-                page.apply_redactions(images=False)  # images=False => resimleri silme
+                    # Create a redaction annotation for this text - use the encrypted version
+                    anon_text = encrypted
+                    # Make sure it's a reasonable length to display in the PDF
+                    if len(anon_text) > 50:
+                        # Truncate and add ellipsis
+                        anon_text = anon_text[:47] + "..."
+                    annot = page.add_redact_annot(inst, text=anon_text)
+                    # Apply redactions
+                    page.apply_redactions()
+            
+            # 2. Face detection and blurring in images
+            try:
+                # Get page pixmap (rasterize the page)
+                pix = page.get_pixmap()
+                img_data = pix.tobytes()
+                
+                # Convert to PIL image
+                pil_img = Image.frombytes("RGB", [pix.width, pix.height], img_data)
+                
+                # Detect faces
+                img_bytes = io.BytesIO()
+                pil_img.save(img_bytes, format="PNG")
+                img_bytes.seek(0)
+                faces = detect_faces(img_bytes.getvalue())
+                
+                # If faces detected, add white rectangles over them
+                if faces and len(faces):
+                    logger.info(f"Found {len(faces)} faces on page {page_idx+1}")
+                    
+                    for (x, y, w, h) in faces:
+                        # Scale face coordinates to match the page dimensions
+                        scale_x = page.rect.width / pix.width
+                        scale_y = page.rect.height / pix.height
+                        
+                        # Create rectangle with some padding
+                        padding = 5
+                        face_rect = fitz.Rect(
+                            x * scale_x - padding,
+                            y * scale_y - padding,
+                            (x + w) * scale_x + padding,
+                            (y + h) * scale_y + padding
+                        )
+                        
+                        # Add white rectangle with high opacity
+                        page.draw_rect(face_rect, color=(1, 1, 1), fill=(1, 1, 1), opacity=0.9)
+            
+            except Exception as e:
+                logger.error(f"Error processing faces on page {page_idx+1}: {e}")
+                # Continue to next page even if this page fails
         
-        # -------------------------------------------------
-        # B) GÖMÜLÜ GÖRSELLERİ BULUP YÜZLERİ BULANIKLAŞTIRMA
-        # -------------------------------------------------
-        for page_idx in range(len(doc)):
-            page = doc[page_idx]
-            
-            # Bu liste, sayfadaki tüm resimleri (xref vs.) döndürür
-            image_list = page.get_images(full=True)
-            
-            if not image_list:
-                continue  # Bu sayfada gömülü resim yok
-            
-            for img_info in image_list:
-                # genelde img_info[0] xref oluyor
-                # fitz doc: [xref, smask, width, height, bpc, colorspace, ...]
-                xref = img_info[0]
-                
-                # Resmi bellek olarak çek
-                img_dict = safely_extract_image(doc, xref)
-                if not img_dict:
-                    continue  # extraction başarısız
-                
-                img_bytes = img_dict["image"]
-                
-                # Yüz tespiti
-                faces = detect_faces(img_bytes)
-                if not faces:
-                    continue  # Yüz yoksa blur gereksiz
-                
-                # Blur uygula
-                blurred_bytes = blur_faces(img_bytes, faces)
-                
-                # Şayet blur uygulanmışsa, orijinalle aynı olmayabilir
-                if blurred_bytes != img_bytes:
-                    # Şimdi page.update_image ile yenisini koyuyoruz
-                    try:
-                        # Not: update_image() PyMuPDF 1.18+ sürümlerde mevcuttur.
-                        page.replace_image(xref, stream=blurred_bytes)
-                        print("BLURLANDI")
-                    except Exception as e:
-                        logger.error(f"Failed to update image xref={xref}: {e}")
-        
-        # -------------------------------------------------
-        # C) Değişiklikleri kaydet
-        # -------------------------------------------------
+        # Save the anonymized PDF
         doc.save(temp_path)
         doc.close()
         
@@ -946,32 +940,6 @@ def anonymize_pdf(pdf_path, anonymize_map):
         logger.error(f"Error anonymizing PDF: {e}")
         return None
 
-    
-def create_anonymization_map(authors, institutions):
-    """
-    Create a mapping of original text to AES encrypted text
-    Returns a dictionary {original: encrypted}
-    """
-    # Create a new AES cipher instance
-    cipher = AESCipher()
-    
-    # Get the key for storage
-    encryption_key = cipher.get_key_hex()
-    
-    anon_map = {}
-    
-    # Encrypt authors
-    for idx, author in enumerate(authors):
-        encrypted_author = cipher.encrypt(author)
-        anon_map[author] = encrypted_author
-    
-    # Encrypt institutions
-    for idx, institution in enumerate(institutions):
-        encrypted_institution = cipher.encrypt(institution)
-        anon_map[institution] = encrypted_institution
-    
-    # Return both the map and the key
-    return anon_map, encryption_key
 
 
 
@@ -1026,10 +994,6 @@ def detect_faces(image_bytes):
         faces_list = []
         for (x, y, w, h) in faces:
             faces_list.append((int(x), int(y), int(w), int(h)))
-            
-            
-        
-        print(faces_list)
         
         return faces_list
     except Exception as e:

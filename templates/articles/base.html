@@ -13,6 +13,58 @@
         .shadow-card {
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
+        .action-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            font-size: inherit;
+        }
+        
+        .action-button:focus {
+            outline: none;
+        }
+        
+        .action-icon {
+            transition: transform 0.2s ease;
+        }
+        
+        .action-button:hover .action-icon {
+            transform: scale(1.2);
+        }
+
+        .quick-action-form {
+            display: inline-block;
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 120px;
+            background-color: rgba(55, 65, 81, 0.9);
+            color: white;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-weight: normal;
+            font-size: 0.75rem;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col">

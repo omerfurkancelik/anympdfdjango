@@ -21,11 +21,14 @@ class Article(models.Model):
     last_updated = models.DateTimeField(auto_now=True)
     referee = models.ForeignKey('Referee', on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_articles')
     
-    # New fields for extracted metadata
+    # Metadata extraction fields
     extracted_authors = models.TextField(blank=True, null=True, help_text="Automatically extracted author names")
     extracted_institutions = models.TextField(blank=True, null=True, help_text="Automatically extracted institutions")
     extracted_keywords = models.TextField(blank=True, null=True, help_text="Automatically extracted keywords")
-    anonymization_map = models.TextField(blank=True, null=True, help_text="JSON mapping of original text to anonymized text")
+    
+    # New fields for AES encryption
+    anonymization_map = models.TextField(blank=True, null=True, help_text="JSON mapping of original text to encrypted text")
+    anonymization_key = models.CharField(max_length=128, blank=True, null=True, help_text="Encryption key for anonymization")
     is_anonymized = models.BooleanField(default=False, help_text="Whether the article has been anonymized")
     
     def save(self, *args, **kwargs):
@@ -43,6 +46,18 @@ class Article(models.Model):
             return self.extracted_authors.split('|')
         return []
     
+    
+    # Add this method to your Article model to get status display name
+
+    def get_status_display(self):
+        """
+        Returns the display name for the current status
+        """
+        for status_code, status_name in self.STATUS_CHOICES:
+            if self.status == status_code:
+                return status_name
+        return self.status  # Fallback to the code if no match
+
     def get_extracted_institutions_list(self):
         """Return extracted institutions as a list"""
         if self.extracted_institutions:
@@ -97,6 +112,19 @@ class ArticleFeedback(models.Model):
     
     def __str__(self):
         return f"Feedback on {self.article.tracking_code} by {self.referee.user.username}"
+    
+    def get_recommendation_display(self):
+        """
+        Returns the display name for the current recommendation
+        """
+        for code, name in (
+        ('accept', 'Accept'),
+        ('revise', 'Revise and Resubmit'),
+        ('reject', 'Reject')
+    ):
+            if self.recommendation == code:
+                return name
+        return self.recommendation  # Fallback to the code if no match
 
 class ChatMessage(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='messages')

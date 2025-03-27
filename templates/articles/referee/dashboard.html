@@ -87,12 +87,28 @@
                             </td>
                             <td class="py-4 px-4 whitespace-nowrap text-sm font-medium">
                                 <div class="flex space-x-2">
-                                    <a href="{% url 'referee_review' article_id=article.id referee_id=referee.id %}" class="text-green-600 hover:text-green-900">
+                                    <a href="{% url 'referee_review' article_id=article.id referee_id=referee.id %}" class="text-indigo-600 hover:text-indigo-900" title="Review">
                                         <i class="fas fa-book"></i>
                                     </a>
-                                    <a href="{% url 'download_article' article.id %}" class="text-gray-600 hover:text-gray-900">
+                                    <a href="{% url 'download_article' article.id %}" class="text-gray-600 hover:text-gray-900" title="Download">
                                         <i class="fas fa-download"></i>
                                     </a>
+                                    {% if article.status == 'submitted' or article.status == 'under_review' %}
+                                    <form method="post" action="{% url 'referee_quick_action' article.id referee.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="accept">
+                                        <button type="submit" class="text-green-600 hover:text-green-900" title="Accept Article" onclick="return confirm('Are you sure you want to accept this article?')">
+                                            <i class="fas fa-check-circle"></i>
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'referee_quick_action' article.id referee.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="revise">
+                                        <button type="submit" class="text-orange-600 hover:text-orange-900" title="Request Revision" onclick="return confirm('Are you sure you want to request revision for this article?')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

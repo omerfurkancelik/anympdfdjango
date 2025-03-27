@@ -13,6 +13,8 @@ urlpatterns = [
     path('upload/success/<str:tracking_code>/', views.upload_success, name='upload_success'),
     path('track/', views.track_article, name='track_article'),
     path('article/chat/<str:tracking_code>/', views.article_chat, name='article_chat'),
+    path('track/', views.track_article, name='track_article'),
+    path('article/chat/<str:tracking_code>/', views.article_chat, name='article_chat'),
     
     # Editor section
     path('editor/dashboard/', views.editor_dashboard, name='editor_dashboard'),
@@ -35,6 +37,7 @@ urlpatterns = [
     path('referee/dashboard/', views.referee_dashboard, name='referee_dashboard_default'),
     path('referees/add/', views.add_referee, name='add_referee'),
     path('referee/article/<int:article_id>/<int:referee_id>/restore-info/', views.restore_article_info, name='restore_article_info'),
+    path('referee/article/<int:article_id>/<int:referee_id>/quick-action/', views.referee_quick_action, name='referee_quick_action'),
 
 
     
