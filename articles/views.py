@@ -163,7 +163,6 @@ def article_chat(request, tracking_code):
         'email': email
     })
 
-
 def editor_dashboard(request):
     articles = Article.objects.all().order_by('-submission_date')
     return render(request, 'articles/editor/dashboard.html', {'articles': articles})
@@ -662,9 +661,7 @@ def referee_review(request, article_id, referee_id=None):
         'feedback': feedback,
         'referee': referee
     })
-    
-    
-    
+        
 def download_article(request, article_id):
     article = get_object_or_404(Article, id=article_id)
     # Add logic to serve the file securely
@@ -672,8 +669,6 @@ def download_article(request, article_id):
     response = HttpResponse(article.file, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{article.tracking_code}.pdf"'
     return response
-
-
 
 def add_referee(request):
 
@@ -706,8 +701,6 @@ def add_referee(request):
     
     return render(request, 'articles/referee/add.html', {'form': form})
 
-
-
 def delete_article(request, article_id):
 
     
@@ -729,7 +722,6 @@ def delete_article(request, article_id):
         return redirect('editor_dashboard')
     
     return render(request, 'articles/editor/delete_confirm.html', {'article': article})
-
 
 def reset_database(request):
     """
@@ -793,7 +785,6 @@ def reset_database(request):
     return render(request, 'articles/editor/reset_database.html')
 
 # Alternative implementation using Django's ORM for database reset
-
 def reset_database_orm(request):
     """
     Remove all data from the database and media files, then recreate initial admin account.
@@ -898,67 +889,57 @@ def reset_database_orm(request):
     
     return render(request, 'articles/editor/reset_database.html')
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def update_article_file(request, tracking_code):
+    article = get_object_or_404(Article, tracking_code=tracking_code)
+    
+    if request.method == 'POST':
+        new_file = request.FILES.get('new_file')
+        
+        if not new_file:
+            messages.error(request, "No file was uploaded. Please select a file.")
+            return redirect('track_article')
+            
+        # Check if file is PDF
+        if not new_file.name.endswith('.pdf'):
+            messages.error(request, "Only PDF files are accepted.")
+            return redirect('track_article')
+            
+        # Check file size (10MB limit)
+        if new_file.size > 10 * 1024 * 1024:  # 10MB in bytes
+            messages.error(request, "File size exceeds the 10MB limit.")
+            return redirect('track_article')
+            
+        try:
+            # Delete the old file if it exists
+            if article.file:
+                old_path = article.file.path
+                if os.path.isfile(old_path):
+                    os.remove(old_path)
+                    
+            # Save the new file
+            article.file = new_file
+            article.status = 'submitted'  # Reset status to submitted
+            article.save()
+            
+            # Add a system message to chat if it exists
+            try:
+                from .models import ChatMessage
+                ChatMessage.objects.create(
+                    article=article,
+                    sender_type='SYSTEM',
+                    message=f"Author has updated the article file on {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                )
+            except:
+                pass  # Skip if chat functionality is not available
+                
+            messages.success(request, "Your article has been successfully updated and is now under review.")
+        except Exception as e:
+            messages.error(request, f"An error occurred while updating your article: {str(e)}")
+            
+        return redirect('track_article')
+        
+    # If not POST, redirect to track article page
+    return redirect('track_article')
 
 from .utils import (extract_text_from_pdf, extract_authors, extract_institutions, 
                    extract_keywords, create_anonymization_map, anonymize_pdf,anonymize_pdf_legacy,

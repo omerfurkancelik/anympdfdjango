@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views  # Bu satır önemli, tüm views'leri import ediyoruz
 import os
 from django.contrib import admin
 
