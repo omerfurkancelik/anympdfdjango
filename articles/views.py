@@ -806,22 +806,7 @@ def reset_database(request):
             return redirect('editor_dashboard')
         
         try:
-            # 1. Delete all media files
-            media_root = settings.MEDIA_ROOT
-            
-            # Delete article files
-            articles_dir = os.path.join(media_root, 'articles')
-            if os.path.exists(articles_dir):
-                shutil.rmtree(articles_dir)
-                os.makedirs(articles_dir)  # Recreate empty directory
-                
-            # Delete anonymized article files
-            anon_articles_dir = os.path.join(media_root, 'anonymized_articles')
-            if os.path.exists(anon_articles_dir):
-                shutil.rmtree(anon_articles_dir)
-                os.makedirs(anon_articles_dir)  # Recreate empty directory
-            
-            # 2. Clear database tables (retain structure)
+            # 1. Delete database records first
             with connection.cursor() as cursor:
                 # Get list of all tables
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name!='sqlite_sequence' AND name!='auth_permission' AND name!='auth_group' AND name!='django_content_type' AND name!='django_migrations';")
@@ -831,13 +816,39 @@ def reset_database(request):
                 for table in tables:
                     cursor.execute(f"DELETE FROM {table};")
             
-            # 3. Recreate default editor account
+            # 2. Recreate default editor account
             user = User.objects.create_user(
                 username='editor1',
                 email='editor1@test.com',
                 password='password123'
             )
             Editor.objects.create(user=user)
+            
+            # 3. İçerik temizleme - klasörleri silmeden sadece içeriği temizleme
+            media_root = settings.MEDIA_ROOT
+            
+            # Helper function to safely delete files in a directory
+            def clear_directory_contents(directory_path):
+                if os.path.exists(directory_path):
+                    try:
+                        # Only delete files, not subdirectories
+                        for item in os.listdir(directory_path):
+                            item_path = os.path.join(directory_path, item)
+                            if os.path.isfile(item_path):
+                                try:
+                                    os.unlink(item_path)
+                                except Exception as e:
+                                    print(f"Error deleting {item_path}: {e}")
+                    except Exception as e:
+                        print(f"Error accessing directory {directory_path}: {e}")
+            
+            # Clean articles directory
+            articles_dir = os.path.join(media_root, 'articles')
+            clear_directory_contents(articles_dir)
+            
+            # Clean anonymized_articles directory
+            anon_articles_dir = os.path.join(media_root, 'anonymized_articles')
+            clear_directory_contents(anon_articles_dir)
             
             messages.success(request, "Database has been reset successfully. A new editor account has been created.")
             
@@ -848,13 +859,15 @@ def reset_database(request):
             return redirect('home')
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # Print detailed error to console for debugging
             messages.error(request, f"An error occurred during database reset: {str(e)}")
             return redirect('editor_dashboard')
     
     return render(request, 'articles/editor/reset_database.html')
 
 
-# Alternative implementation using Django's ORM for database reset
+# Alternate ORM implementation 
 def reset_database_orm(request):
     """
     Remove all data from the database and media files, then recreate initial admin account.
@@ -872,23 +885,7 @@ def reset_database_orm(request):
             current_user_id = request.user.id
             is_current_user_editor = hasattr(request.user, 'editor')
             
-            # 1. Delete all media files
-            media_root = settings.MEDIA_ROOT
-            
-            # Delete article files
-            articles_dir = os.path.join(media_root, 'articles')
-            if os.path.exists(articles_dir):
-                shutil.rmtree(articles_dir)
-                os.makedirs(articles_dir)  # Recreate empty directory
-                
-            # Delete anonymized article files
-            anon_articles_dir = os.path.join(media_root, 'anonymized_articles')
-            if os.path.exists(anon_articles_dir):
-                shutil.rmtree(anon_articles_dir)
-                os.makedirs(anon_articles_dir)  # Recreate empty directory
-            
-            # 2. Clear database using Django ORM with proper order
-            # Turn off foreign key constraints temporarily
+            # 1. Delete all data in correct order
             from django.db import connection
             with connection.cursor() as cursor:
                 if connection.vendor == 'sqlite':
@@ -897,8 +894,6 @@ def reset_database_orm(request):
                     cursor.execute("SET CONSTRAINTS ALL DEFERRED;")
                 elif connection.vendor == 'mysql':
                     cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
-                    
-            print("bura girdi canim")
             
             # Delete all data in correct order
             ChatMessage.objects.all().delete()
@@ -919,17 +914,39 @@ def reset_database_orm(request):
                 elif connection.vendor == 'mysql':
                     cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
             
-            # 3. Recreate default editor account
-            try:
-                user = User.objects.create_user(
-                    username='editor1',
-                    email='editor1@test.com',
-                    password='passnord123',
-                )
-            except Exception as e:
-                print(e)
-            
+            # 2. Recreate default editor account
+            user = User.objects.create_user(
+                username='editor1',
+                email='editor1@test.com',
+                password='password123'
+            )
             Editor.objects.create(user=user)
+            
+            # 3. İçerik temizleme - klasörleri silmeden sadece içeriği temizleme
+            media_root = settings.MEDIA_ROOT
+            
+            # Helper function to safely delete files in a directory
+            def clear_directory_contents(directory_path):
+                if os.path.exists(directory_path):
+                    try:
+                        # Only delete files, not subdirectories
+                        for item in os.listdir(directory_path):
+                            item_path = os.path.join(directory_path, item)
+                            if os.path.isfile(item_path):
+                                try:
+                                    os.unlink(item_path)
+                                except Exception as e:
+                                    print(f"Error deleting {item_path}: {e}")
+                    except Exception as e:
+                        print(f"Error accessing directory {directory_path}: {e}")
+            
+            # Clean articles directory
+            articles_dir = os.path.join(media_root, 'articles')
+            clear_directory_contents(articles_dir)
+            
+            # Clean anonymized_articles directory
+            anon_articles_dir = os.path.join(media_root, 'anonymized_articles')
+            clear_directory_contents(anon_articles_dir)
             
             messages.success(request, "Database has been reset successfully. A new editor account has been created.")
             
@@ -950,6 +967,8 @@ def reset_database_orm(request):
                     return redirect('home')
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # Print detailed error to console for debugging
             messages.error(request, f"An error occurred during database reset: {str(e)}")
             return redirect('editor_dashboard')
     
