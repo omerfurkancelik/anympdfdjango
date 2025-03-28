@@ -7,29 +7,61 @@ from django.conf import settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.http import HttpResponseForbidden
-from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback
+from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback, ActivityLog
 from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm, AddRefereeForm, ArticleRevisionForm
 from .utils import decrypt_anonymization_map
 
 import os
 import shutil
 import datetime
+from django.core.files.base import ContentFile
+from .utils import (extract_text_from_pdf, extract_authors, extract_institutions, 
+                   extract_keywords, create_anonymization_map, anonymize_pdf, anonymize_pdf_legacy,
+                   match_referees_by_keywords)
+import json
 
+
+def log_activity(article, action, user=None, email=None):
+    """Helper function to log activities related to articles"""
+    # Kullanıcı anonim ise (AnonymousUser), None olarak ayarla
+    if user and not user.is_authenticated:
+        user = None
+        
+    ActivityLog.objects.create(
+        article=article,
+        user=user,
+        email=email,
+        action=action
+    )
 
 
 def home(request):
+    """Home page view"""
     return render(request, 'articles/home.html')
 
 
+def system_logs(request):
+    """View to display system logs"""
+    try:
+        logs = ActivityLog.objects.all().select_related('article', 'user').order_by('-timestamp')
+    except Exception as e:
+        # Tablo yoksa veya başka bir hata olursa boş bir queryset kullan
+        logs = []
+        messages.error(request, f"Log kayıtları yüklenirken bir hata oluştu: {str(e)}")
+    return render(request, 'articles/logs.html', {'logs': logs})
 
 
 # User section views
 def upload_article(request):
+    """Upload a new article"""
     if request.method == 'POST':
         form = ArticleUploadForm(request.POST, request.FILES)
         
         if form.is_valid():
             article = form.save()
+            
+            # Log the article submission
+            log_activity(article, "Article submitted", email=article.email)
             
             # Send email with tracking code
             subject = 'Your Article Submission Tracking Code'
@@ -52,11 +84,15 @@ def upload_article(request):
     
     return render(request, 'articles/user/upload.html', {'form': form})
 
+
 def upload_success(request, tracking_code):
+    """Display success page after upload"""
     article = get_object_or_404(Article, tracking_code=tracking_code)
     return render(request, 'articles/user/upload_success.html', {'article': article})
 
+
 def track_article(request):
+    """Track an article using tracking code and email"""
     article = None
     feedback = None
     
@@ -76,6 +112,9 @@ def track_article(request):
                     article.file = request.FILES['revised_article']
                     article.status = 'submitted'  # Reset to submitted status for re-review
                     article.save()
+                    
+                    # Log the revision submission
+                    log_activity(article, "Revised version submitted", email=article.email)
                     
                     # Create a message to notify about the revision
                     revision_comments = revision_form.cleaned_data.get('revision_comments', '')
@@ -134,9 +173,10 @@ def track_article(request):
         'feedback': feedback,
         'revision_form': revision_form
     })
-    
-    
+
+
 def article_chat(request, tracking_code):
+    """Chat with editors about an article"""
     article = get_object_or_404(Article, tracking_code=tracking_code)
     
     # Verify access using query parameters
@@ -164,19 +204,18 @@ def article_chat(request, tracking_code):
         'email': email
     })
 
+
 def editor_dashboard(request):
+    """Editor dashboard view"""
     articles = Article.objects.all().order_by('-submission_date')
     return render(request, 'articles/editor/dashboard.html', {'articles': articles})
-
 
 
 def referee_quick_action(request, article_id, referee_id):
     """
     Quick action for referee to accept or request revision for an article
     """
-
     referee = get_object_or_404(Referee, id=referee_id)
-    
     article = get_object_or_404(Article, id=article_id, referee=referee)
     
     if request.method == 'POST':
@@ -250,8 +289,6 @@ def assign_referee(request, article_id):
     """
     Assign a referee to an article with checks for anonymization
     """
-
-    
     article = get_object_or_404(Article, id=article_id)
     referees = Referee.objects.all()
     
@@ -273,6 +310,16 @@ def assign_referee(request, article_id):
             article.referee = referee
             article.status = 'under_review'
             article.save()
+            
+            # Oturumun açık olup olmadığını kontrol et
+            user = request.user if request.user.is_authenticated else None
+            
+            # Log the referee assignment
+            log_activity(
+                article, 
+                f"Assigned to referee: {referee.user.username}", 
+                user=user
+            )
             
             # Create a system message to log the assignment
             """ChatMessage.objects.create(
@@ -313,10 +360,9 @@ def assign_referee(request, article_id):
     
     return render(request, 'articles/editor/assign_referee.html', context)
 
-def restore_article_info(request, article_id):
 
-   
-    
+def restore_article_info(request, article_id):
+    """Restore anonymized author information"""
     article = get_object_or_404(Article, id=article_id)
     
     # Get anonymization key from the article
@@ -358,9 +404,9 @@ def restore_article_info(request, article_id):
         messages.error(request, f"Error decrypting information: {e}")
         return redirect('editor_review', article_id=article.id)
 
-def editor_review(request, article_id):
 
-    
+def editor_review(request, article_id):
+    """Editor review article page"""
     article = get_object_or_404(Article, id=article_id)
     all_referees = Referee.objects.all()
     
@@ -382,13 +428,24 @@ def editor_review(request, article_id):
         if action == 'update_status':
             new_status = request.POST.get('status')
             if new_status in [status[0] for status in Article.STATUS_CHOICES]:
+                old_status = article.status
                 article.status = new_status
                 article.save()
+                
+                # Oturumun açık olup olmadığını kontrol et
+                user = request.user if request.user.is_authenticated else None
+                
+                # Log the status change
+                log_activity(
+                    article, 
+                    f"Status changed from '{old_status}' to '{new_status}'", 
+                    user=user
+                )
                 
                 # Create a system message to log the status change
                 ChatMessage.objects.create(
                     article=article,
-                    sender_user=request.user,
+                    sender_user=user,  # Burada da aynı kontrolü uygula
                     content=f"Article status updated to {article.get_status_display()}"
                 )
                 
@@ -403,7 +460,9 @@ def editor_review(request, article_id):
         'revision_messages': revision_messages
     })
 
+
 def editor_chat(request, article_id):
+    """Editor chat with article author"""
     article = get_object_or_404(Article, id=article_id)
     messages_list = article.messages.order_by('timestamp')
     
@@ -439,6 +498,7 @@ def editor_chat(request, article_id):
         'form': form
     })
 
+
 # Referee section views
 def referee_list(request):
     """
@@ -446,6 +506,7 @@ def referee_list(request):
     """
     referees = Referee.objects.all()
     return render(request, 'articles/referee/list.html', {'referees': referees})
+
 
 # Update the referee_dashboard view to accept a referee_id parameter
 def referee_dashboard(request, referee_id=None):
@@ -495,11 +556,8 @@ def referee_dashboard(request, referee_id=None):
     return render(request, 'articles/referee/dashboard.html', context)
 
 
-
 def process_article_metadata(request, article_id):
     """Extract metadata from an article using NLP and anonymize using AES encryption"""
-
-    
     article = get_object_or_404(Article, id=article_id)
     
     if request.method == 'POST':
@@ -576,6 +634,7 @@ def process_article_metadata(request, article_id):
     
     return render(request, 'articles/editor/process_metadata.html', context)
 
+
 # Update the referee_review view to work with the new dashboard
 def referee_review(request, article_id, referee_id=None):
     """
@@ -635,6 +694,13 @@ def referee_review(request, article_id, referee_id=None):
                 #     content=f"Status changed to Rejected based on referee recommendation."
                 # )
             
+            # Log the feedback submission
+            log_activity(
+                article, 
+                f"Referee feedback submitted with recommendation: {recommendation}", 
+                user=referee.user
+            )
+            
             # Notify editor about new feedback
             editors = article.editors.all()
             for editor in editors:
@@ -663,7 +729,9 @@ def referee_review(request, article_id, referee_id=None):
         'referee': referee
     })
         
+
 def download_article(request, article_id):
+    """Download article file"""
     article = get_object_or_404(Article, id=article_id)
     # Add logic to serve the file securely
     # This is simplified and should be implemented properly in production
@@ -671,9 +739,9 @@ def download_article(request, article_id):
     response['Content-Disposition'] = f'attachment; filename="{article.tracking_code}.pdf"'
     return response
 
-def add_referee(request):
 
-        
+def add_referee(request):
+    """Add a new referee"""
     if request.method == 'POST':
         form = AddRefereeForm(request.POST)
         if form.is_valid():
@@ -702,9 +770,9 @@ def add_referee(request):
     
     return render(request, 'articles/referee/add.html', {'form': form})
 
-def delete_article(request, article_id):
 
-    
+def delete_article(request, article_id):
+    """Delete an article"""
     article = get_object_or_404(Article, id=article_id)
     
     if request.method == 'POST':
@@ -724,12 +792,12 @@ def delete_article(request, article_id):
     
     return render(request, 'articles/editor/delete_confirm.html', {'article': article})
 
+
 def reset_database(request):
     """
     Remove all data from the database and media files, then recreate initial admin account.
     CAUTION: This will delete all data!
     """
-
     if request.method == 'POST':
         # First, confirm the action with a security check
         confirmation = request.POST.get('confirmation')
@@ -785,13 +853,13 @@ def reset_database(request):
     
     return render(request, 'articles/editor/reset_database.html')
 
+
 # Alternative implementation using Django's ORM for database reset
 def reset_database_orm(request):
     """
     Remove all data from the database and media files, then recreate initial admin account.
     This version uses Django ORM with proper handling of foreign key constraints.
     """
-
     if request.method == 'POST':
         # First, confirm the action with a security check
         confirmation = request.POST.get('confirmation')
@@ -830,7 +898,6 @@ def reset_database_orm(request):
                 elif connection.vendor == 'mysql':
                     cursor.execute("SET FOREIGN_KEY_CHECKS = 0;")
                     
-                    
             print("bura girdi canim")
             
             # Delete all data in correct order
@@ -853,7 +920,6 @@ def reset_database_orm(request):
                     cursor.execute("SET FOREIGN_KEY_CHECKS = 1;")
             
             # 3. Recreate default editor account
-            
             try:
                 user = User.objects.create_user(
                     username='editor1',
@@ -863,7 +929,6 @@ def reset_database_orm(request):
             except Exception as e:
                 print(e)
             
-
             Editor.objects.create(user=user)
             
             messages.success(request, "Database has been reset successfully. A new editor account has been created.")
@@ -890,7 +955,9 @@ def reset_database_orm(request):
     
     return render(request, 'articles/editor/reset_database.html')
 
+
 def update_article_file(request, tracking_code):
+    """Update an existing article file"""
     article = get_object_or_404(Article, tracking_code=tracking_code)
     
     if request.method == 'POST':
@@ -924,7 +991,6 @@ def update_article_file(request, tracking_code):
             
             # Add a system message to chat if it exists
             try:
-                from .models import ChatMessage
                 ChatMessage.objects.create(
                     article=article,
                     sender_type='SYSTEM',
@@ -941,14 +1007,6 @@ def update_article_file(request, tracking_code):
         
     # If not POST, redirect to track article page
     return redirect('track_article')
-
-from .utils import (extract_text_from_pdf, extract_authors, extract_institutions, 
-                   extract_keywords, create_anonymization_map, anonymize_pdf,anonymize_pdf_legacy,
-                   match_referees_by_keywords)
-from django.core.files.base import ContentFile
-import os
-import json
-
 
 
 def anonymize_article(request, article_id):
@@ -967,7 +1025,7 @@ def anonymize_article(request, article_id):
         for idx, institution in enumerate(institutions_to_anonymize):
             anon_map[institution] = f"Institution-{idx+1}"
         
-        # 3) Map’i kaydedebiliriz (projede set_anonymization_map varsa kullanabilirsiniz)
+        # 3) Map'i kaydedebiliriz (projede set_anonymization_map varsa kullanabilirsiniz)
         article.set_anonymization_map(anon_map)  # varsayıyoruz ki modelde böyle bir fonksiyon var
         
         # 4) PDF Anonimleştirme
@@ -1001,6 +1059,7 @@ def anonymize_article(request, article_id):
         'institutions': article.get_extracted_institutions_list()  # '|'-separated -> list
     })
 
+
 def download_anonymized_article(request, article_id):
     """Download the anonymized version of an article"""
     article = get_object_or_404(Article, id=article_id)
@@ -1014,9 +1073,9 @@ def download_anonymized_article(request, article_id):
     response['Content-Disposition'] = f'attachment; filename="anonymized_{article.tracking_code}.pdf"'
     return response
 
+
 def suggest_referees(request, article_id):
     """Suggest appropriate referees based on article keywords"""
-
     article = get_object_or_404(Article, id=article_id)
     
     if not article.extracted_keywords:
@@ -1041,9 +1100,9 @@ def suggest_referees(request, article_id):
         'keywords': article_keywords
     })
 
+
 def restore_article_info(request, article_id, referee_id):
     """Restore original author information after review (for referee)"""
-
     article = get_object_or_404(Article, id=article_id)
     referee = get_object_or_404(Referee, id=referee_id)
     

@@ -138,13 +138,32 @@ class ChatMessage(models.Model):
     
     @property
     def sender_name(self):
-        if self.sender_user:
+        if self.sender_user and self.sender_user.is_authenticated:
             if hasattr(self.sender_user, 'editor'):
                 return f"Editor: {self.sender_user.username}"
             elif hasattr(self.sender_user, 'referee'):
                 return f"Referee: {self.sender_user.username}"
             return self.sender_user.username
-        return "Author"
+        return "Author" if self.sender_email else "System"
     
     def __str__(self):
         return f"Message on {self.article.tracking_code} at {self.timestamp}"
+
+
+class ActivityLog(models.Model):
+    """Model to track all activities related to articles"""
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    email = models.EmailField(blank=True, null=True)  # For anonymous users
+    action = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+    
+    def __str__(self):
+        if self.user:
+            actor = self.user.username
+        else:
+            actor = self.email or "System"
+        return f"{actor} - {self.action} - {self.article.tracking_code}"
