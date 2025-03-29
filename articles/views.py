@@ -7,7 +7,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.http import HttpResponseForbidden
-from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback, ActivityLog
+from .models import Article, Editor, Referee, ChatMessage, ArticleFeedback, Log
 from .forms import ArticleUploadForm, ArticleTrackingForm, ChatMessageForm, ArticleFeedbackForm, AddRefereeForm, ArticleRevisionForm
 from .utils import decrypt_anonymization_map
 
@@ -21,34 +21,12 @@ from .utils import (extract_text_from_pdf, extract_authors, extract_emails, extr
 import json
 
 
-def log_activity(article, action, user=None, email=None):
-    """Helper function to log activities related to articles"""
-    # Kullanıcı anonim ise (AnonymousUser), None olarak ayarla
-    if user and not user.is_authenticated:
-        user = None
-        
-    ActivityLog.objects.create(
-        article=article,
-        user=user,
-        email=email,
-        action=action
-    )
-
 
 def home(request):
     """Home page view"""
     return render(request, 'articles/home.html')
 
 
-def system_logs(request):
-    """View to display system logs"""
-    try:
-        logs = ActivityLog.objects.all().select_related('article', 'user').order_by('-timestamp')
-    except Exception as e:
-        # Tablo yoksa veya başka bir hata olursa boş bir queryset kullan
-        logs = []
-        messages.error(request, f"Log kayıtları yüklenirken bir hata oluştu: {str(e)}")
-    return render(request, 'articles/logs.html', {'logs': logs})
 
 
 # User section views
@@ -61,7 +39,7 @@ def upload_article(request):
             article = form.save()
             
             # Log the article submission
-            log_activity(article, "Article submitted", email=article.email)
+
             
             # Send email with tracking code
             subject = 'Your Article Submission Tracking Code'
@@ -76,6 +54,11 @@ def upload_article(request):
             The Editorial Team
             """
             #send_mail(subject, message, settings.EMAIL_HOST_USER, [article.email])
+            
+            Log.objects.create(
+                log_desc=f"Article {article} has been added.",
+                log_type="info"
+            )
             
             messages.success(request, f'Your article has been successfully uploaded. A tracking code has been sent to {article.email}')
             return redirect('upload_success', tracking_code=article.tracking_code)
@@ -112,9 +95,7 @@ def track_article(request):
                     article.file = request.FILES['revised_article']
                     article.status = 'submitted'  # Reset to submitted status for re-review
                     article.save()
-                    
-                    # Log the revision submission
-                    log_activity(article, "Revised version submitted", email=article.email)
+                
                     
                     # Create a message to notify about the revision
                     revision_comments = revision_form.cleaned_data.get('revision_comments', '')
@@ -315,11 +296,7 @@ def assign_referee(request, article_id):
             user = request.user if request.user.is_authenticated else None
             
             # Log the referee assignment
-            log_activity(
-                article, 
-                f"Assigned to referee: {referee.user.username}", 
-                user=user
-            )
+
             
             # Create a system message to log the assignment
             """ChatMessage.objects.create(
@@ -436,11 +413,7 @@ def editor_review(request, article_id):
                 user = request.user if request.user.is_authenticated else None
                 
                 # Log the status change
-                log_activity(
-                    article, 
-                    f"Status changed from '{old_status}' to '{new_status}'", 
-                    user=user
-                )
+
                 
                 # Create a system message to log the status change
                 ChatMessage.objects.create(
@@ -700,11 +673,6 @@ def referee_review(request, article_id, referee_id=None):
                 # )
             
             # Log the feedback submission
-            log_activity(
-                article, 
-                f"Referee feedback submitted with recommendation: {recommendation}", 
-                user=referee.user
-            )
             
             # Notify editor about new feedback
             editors = article.editors.all()

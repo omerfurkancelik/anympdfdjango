@@ -39,9 +39,6 @@ urlpatterns = [
     path('referee/article/<int:article_id>/<int:referee_id>/restore-info/', views.restore_article_info, name='restore_article_info'),
     path('referee/article/<int:article_id>/<int:referee_id>/quick-action/', views.referee_quick_action, name='referee_quick_action'),
 
-    # Logs page
-    path('logs/', views.system_logs, name='system_logs'),
-
     
     # File download
     path('download/<int:article_id>/', views.download_article, name='download_article'),
