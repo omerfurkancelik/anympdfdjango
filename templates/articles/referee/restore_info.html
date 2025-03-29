@@ -65,7 +65,7 @@
                                 {% for encrypted, original in authors %}
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">
-                                        <div class="max-w-lg overflow-hidden truncate">{{ encrypted }}</div>
+                                        <div class="max-w-lg overflow-auto">{{ encrypted }}</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">
                                         {{ original }}
@@ -99,7 +99,7 @@
                                 {% for encrypted, original in institutions %}
                                 <tr>
                                     <td class="px-6 py-4 text-sm font-mono text-gray-600">
-                                        <div class="max-w-lg overflow-hidden truncate">{{ encrypted }}</div>
+                                        <div class="max-w-lg overflow-auto">{{ encrypted }}</div>
                                     </td>
                                     <td class="px-6 py-4 text-sm font-medium text-indigo-600">
                                         {{ original }}
@@ -112,6 +112,40 @@
                 </div>
                 {% else %}
                 <p class="text-gray-500 text-sm">No institution information was encrypted.</p>
+                {% endif %}
+            </div>
+            
+            <!-- Email Addresses Section -->
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Encrypted Email Addresses</h2>
+                
+                {% if emails %}
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Encrypted Value (Visible to Referees)</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Email (Editors Only)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for encrypted, original in emails %}
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-mono text-gray-600">
+                                        <div class="max-w-lg overflow-auto">{{ encrypted }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium text-indigo-600">
+                                        {{ original }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-sm">No email addresses were encrypted.</p>
                 {% endif %}
             </div>
             

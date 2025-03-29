@@ -15,8 +15,8 @@ import os
 import shutil
 import datetime
 from django.core.files.base import ContentFile
-from .utils import (extract_text_from_pdf, extract_authors, extract_institutions, 
-                   extract_keywords, create_anonymization_map, anonymize_pdf, anonymize_pdf_legacy,
+from .utils import (extract_text_from_pdf, extract_authors, extract_emails, extract_institutions, 
+                   extract_keywords, create_anonymization_map, anonymize_pdf,
                    match_referees_by_keywords)
 import json
 
@@ -558,6 +558,7 @@ def referee_dashboard(request, referee_id=None):
 
 def process_article_metadata(request, article_id):
     """Extract metadata from an article using NLP and anonymize using AES encryption"""
+    
     article = get_object_or_404(Article, id=article_id)
     
     if request.method == 'POST':
@@ -572,25 +573,29 @@ def process_article_metadata(request, article_id):
             authors = extract_authors(text)
             institutions = extract_institutions(text)
             keywords = extract_keywords(text)
+            emails = extract_emails(text)
             
             # Save extracted metadata
             article.extracted_authors = '|'.join(authors)
             article.extracted_institutions = '|'.join(institutions)
             article.extracted_keywords = '|'.join(keywords)
+            article.extracted_emails = '|'.join(emails)
             article.save()
             
             messages.success(request, "Article metadata extracted successfully.")
             return redirect('process_article_metadata', article_id=article.id)
             
         elif action == 'anonymize':
-            # Get authors and institutions to anonymize
+            # Get authors, institutions, and emails to anonymize
             authors_to_anonymize = request.POST.getlist('authors')
             institutions_to_anonymize = request.POST.getlist('institutions')
+            emails_to_anonymize = request.POST.getlist('emails')
             
             # Create anonymization map using AES encryption
             anon_map, encryption_key = create_anonymization_map(
                 authors_to_anonymize, 
-                institutions_to_anonymize
+                institutions_to_anonymize,
+                emails_to_anonymize
             )
             
             # Save anonymization map and key to the article
@@ -629,11 +634,11 @@ def process_article_metadata(request, article_id):
         'article': article,
         'authors': article.get_extracted_authors_list(),
         'institutions': article.get_extracted_institutions_list(),
-        'keywords': article.get_extracted_keywords_list()
+        'keywords': article.get_extracted_keywords_list(),
+        'emails': article.get_extracted_emails_list()
     }
     
     return render(request, 'articles/editor/process_metadata.html', context)
-
 
 # Update the referee_review view to work with the new dashboard
 def referee_review(request, article_id, referee_id=None):
@@ -1028,42 +1033,45 @@ def update_article_file(request, tracking_code):
     return redirect('track_article')
 
 
+
 def anonymize_article(request, article_id):
-    """Anonymize an article by replacing author and institution information"""
+    """Anonymize an article by replacing author and institution information with AES encrypted values"""
     article = get_object_or_404(Article, id=article_id)
     
     if request.method == 'POST':
-        # 1) Formdan seçilen yazarlar/kurumlar
+        # 1) Get authors/institutions/emails selected for anonymization
         authors_to_anonymize = request.POST.getlist('authors')
         institutions_to_anonymize = request.POST.getlist('institutions')
+        emails_to_anonymize = request.POST.getlist('emails')
         
-        # 2) Anonimleştirme haritası (örn. "MOHAMMAD ASIF" => "Author-1")
-        anon_map = {}
-        for idx, author in enumerate(authors_to_anonymize):
-            anon_map[author] = f"Author-{idx+1}"
-        for idx, institution in enumerate(institutions_to_anonymize):
-            anon_map[institution] = f"Institution-{idx+1}"
+        # 2) Create AES encryption map (original text => encrypted text)
+        anon_map, encryption_key = create_anonymization_map(
+            authors_to_anonymize, 
+            institutions_to_anonymize,
+            emails_to_anonymize
+        )
         
-        # 3) Map'i kaydedebiliriz (projede set_anonymization_map varsa kullanabilirsiniz)
-        article.set_anonymization_map(anon_map)  # varsayıyoruz ki modelde böyle bir fonksiyon var
+        # 3) Save the encryption map and key to the article
+        article.set_anonymization_map(anon_map)
+        article.anonymization_key = encryption_key
         
-        # 4) PDF Anonimleştirme
+        # 4) Apply anonymization to the PDF
         if anon_map:
             pdf_path = article.file.path
             anonymized_path = anonymize_pdf(pdf_path, anon_map)
             
             if anonymized_path:
-                # Anonimleştirilmiş PDF'yi Article modeline kaydet
+                # Save anonymized PDF to the article
                 with open(anonymized_path, 'rb') as f:
                     article.anonymized_file.save(
                         f"anonymized_{os.path.basename(article.file.name)}",
                         ContentFile(f.read())
                     )
-                os.remove(anonymized_path)  # temp dosyayı sil
+                os.remove(anonymized_path)  # Remove temporary file
                 
                 article.is_anonymized = True
                 article.save()
-                messages.success(request, "Article anonymized successfully.")
+                messages.success(request, "Article anonymized successfully with AES encryption.")
             else:
                 messages.error(request, "Failed to anonymize article.")
         else:
@@ -1071,13 +1079,17 @@ def anonymize_article(request, article_id):
         
         return redirect('editor_review', article_id=article.id)
     
-    # GET isteğinde, kullanıcıya hangi yazar/kurum anonimleştirilsin diye seçenek sunuyoruz
+    # Extract text from PDF to find emails
+    pdf_text = extract_text_from_pdf(article.file.path)
+    emails = extract_emails(pdf_text)
+    
+    # GET request: Show form for user to select what to anonymize
     return render(request, 'articles/editor/anonymize.html', {
         'article': article,
-        'authors': article.get_extracted_authors_list(),       # '|'-separated -> list
-        'institutions': article.get_extracted_institutions_list()  # '|'-separated -> list
+        'authors': article.get_extracted_authors_list(),
+        'institutions': article.get_extracted_institutions_list(),
+        'emails': emails
     })
-
 
 def download_anonymized_article(request, article_id):
     """Download the anonymized version of an article"""
@@ -1121,7 +1133,8 @@ def suggest_referees(request, article_id):
 
 
 def restore_article_info(request, article_id, referee_id):
-    """Restore original author information after review (for referee)"""
+    """Restore original article information after review (for referee)"""
+    
     article = get_object_or_404(Article, id=article_id)
     referee = get_object_or_404(Referee, id=referee_id)
     
@@ -1137,11 +1150,27 @@ def restore_article_info(request, article_id, referee_id):
     # Get anonymization map
     anon_map = article.get_anonymization_map()
     
-    # Create a reverse mapping (anonymized -> original)
-    reverse_map = {v: k for k, v in anon_map.items()}
+    # Create categorized mappings (encrypted -> original)
+    authors = []
+    institutions = []
+    emails = []
+    
+    for original, encrypted in anon_map.items():
+        # Check if this is an email
+        if '@' in original and '.' in original.split('@')[1]:
+            emails.append((encrypted, original))
+        # Check if this is an institution
+        elif any(keyword in original.lower() for keyword in 
+                 ["university", "institute", "college", "department", 
+                  "lab", "laboratory", "center", "centre", "school"]):
+            institutions.append((encrypted, original))
+        # Otherwise assume it's an author
+        else:
+            authors.append((encrypted, original))
     
     return render(request, 'articles/referee/restore_info.html', {
         'article': article,
-        'anonymization_map': anon_map,
-        'reverse_map': reverse_map
+        'authors': authors,
+        'institutions': institutions,
+        'emails': emails
     })

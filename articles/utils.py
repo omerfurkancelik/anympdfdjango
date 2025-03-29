@@ -36,12 +36,12 @@ except LookupError:
 
 # Load spaCy model
 try:
-    nlp = spacy.load("en_core_web_sm")
+    nlp = spacy.load("en_core_web_trf")
 except:
     logger.warning("Could not load spaCy model. Running spaCy download...")
     import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_trf"])
+    nlp = spacy.load("en_core_web_trf")
     
 
 class AES:
@@ -666,10 +666,7 @@ class AESCipher:
     
     
 def extract_text_from_pdf(pdf_path):
-    """
-    PDF'den metin okuyan basit bir fonksiyon örneği.
-    PyMuPDF (fitz) veya PyPDF2 kullanılabilir.
-    """
+
     text = []
     try:
         with fitz.open(pdf_path) as doc: #PDF i açar
@@ -680,66 +677,115 @@ def extract_text_from_pdf(pdf_path):
         logger.error(f"Error extracting text from PDF: {e}")
         return ""
         
-        
-    with open("denemetext.txt","w",encoding="utf-8") as f: #Bu kısım çalışmıyor
-        f.write(text)
-    return text
+def extract_emails(text):
+    """
+    Extract email addresses from text using regex
+    Returns a list of unique email addresses
+    """
+    # Regular expression to match email addresses
+    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    
+    # Find all matches
+    emails = re.findall(email_pattern, text)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_emails = []
+    for email in emails:
+        if email.lower() not in seen:
+            seen.add(email.lower())
+            unique_emails.append(email)
+    
+    logger.info(f"[extract_emails] Found emails: {unique_emails}")
+    print(f"[extract_emails] Found emails: {unique_emails}")
+    return unique_emails
 
-def extract_authors(text): #Yazarları çıkaran fonksiyon (geliştirilecek)
+
+def extract_authors(text):
     """
-    Metinden potansiyel yazar isimlerini çıkarmaya çalışır.
-    1) 'AUTHORS?' veya 'by' gibi kalıpları yakalar.
-    2) Bulamazsa spaCy ile PERSON etiketlerini çeker.
-    3) Doktora vb. unvanları siler, gereksiz kısımları temizler.
+    Extract authors by finding all people mentioned before the abstract.
+    1) Locate the abstract section in the document
+    2) Process all text before the abstract to find people entities
+    3) Clean up extracted names by removing titles and other irrelevant information
     """
-    # Regex ile denenecek kalıplar
-    author_section_patterns = [
-        r'(?i)AUTHORS?:?\s*(.*?)(?:\n\n|\n\s*ABSTRACT)',
-        r'(?i)(?:by|written by)\s+(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
+    # First, find the location of 'abstract' in the text
+    abstract_patterns = [
+        r'(?i)abstract\s*\n',
+        r'(?i)abstract:',
+        r'(?i)abstract\s*\-',
+        r'(?i)\babstract\b'
     ]
     
+    abstract_position = len(text)  # Default to end of text if no abstract found
+    
+    # Find the earliest occurrence of 'abstract'
+    for pattern in abstract_patterns:
+        matches = list(re.finditer(pattern, text))
+        if matches:
+            # Get the position of the first match
+            pos = matches[0].start()
+            if pos < abstract_position:
+                abstract_position = pos
+    
+    # If no abstract found, use a reasonable portion of the document (first 2000 chars)
+    if abstract_position == len(text):
+        logger.warning("No abstract section found, using first 2000 characters")
+        text_before_abstract = text[:2000]
+    else:
+        # Get all text before the abstract
+        text_before_abstract = text[:abstract_position]
+    
+    # Process the text before abstract with spaCy to find people
+    doc = nlp(text_before_abstract)
+    
+    # Extract people entities
     authors = []
-    found_via_regex = False
-    for pattern in author_section_patterns:
-        match = re.search(pattern, text, flags=re.DOTALL)
-        if match:
-            found_via_regex = True
-            author_text = match.group(1)
-            # virgül, "and", ";" vb. ayır
-            potential_authors = re.split(r',|\band\b|;', author_text)
-            authors.extend([a.strip() for a in potential_authors if a.strip()])
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            authors.append(ent.text.strip())
     
-    # Eğer Regex yoluyla bulamadıysak spaCy PERSON etiketlerini kullanalım
-    if not found_via_regex:
-        # Çok büyük metinleri kısaltabiliriz (örnek: ilk 5000 karakter)
-        doc = nlp(text[:5000])
-        for ent in doc.ents:
-            if ent.label_ == "PERSON":
-                authors.append(ent.text.strip())
+    # If spaCy doesn't find any PERSON entities, try fallback methods
+    if not authors:
+        # Look for common author patterns like "Author: John Smith"
+        author_patterns = [
+            r'(?i)author[s]?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
+            r'(?i)(?:by|written by)\s+(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
+        ]
+        
+        for pattern in author_patterns:
+            match = re.search(pattern, text_before_abstract, flags=re.DOTALL)
+            if match:
+                author_text = match.group(1)
+                # Split by commas, "and", or semicolons
+                potential_authors = re.split(r',|\band\b|;', author_text)
+                authors.extend([a.strip() for a in potential_authors if a.strip()])
     
-    # Unvanları temizle (Dr., Prof. vb.)
+    # Clean up extracted names
     cleaned_authors = []
-    for a in authors:
-        clean_a = re.sub(r'\b(Dr|Prof|PhD|MD|MSc|BSc|BA|MA)\.?', '', a, flags=re.IGNORECASE)
-        # Birden fazla boşluğu teke indir
-        clean_a = re.sub(r'\s+', ' ', clean_a).strip()
-        # Çok uzun olmayan (örn. en fazla 4 kelime) isimleri al
-        if clean_a and len(clean_a.split()) <= 4:
-            cleaned_authors.append(clean_a)
+    for author in authors:
+        # Remove titles and degrees
+        clean_name = re.sub(r'\b(Dr|Prof|PhD|MD|MSc|BSc|BA|MA|MEng)\.?', '', author, flags=re.IGNORECASE)
+        # Remove multiple spaces
+        clean_name = re.sub(r'\s+', ' ', clean_name).strip()
+        # Only include if not too long (likely not a person's name if too many words)
+        if clean_name and len(clean_name.split()) <= 4:
+            cleaned_authors.append(clean_name)
     
-    # Tekrarlıları temizleyelim
-    cleaned_authors = list(set(cleaned_authors))
-    logger.info(f"[extract_authors] Found authors: {cleaned_authors}")
-    return cleaned_authors
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_authors = []
+    for author in cleaned_authors:
+        if author.lower() not in seen:
+            seen.add(author.lower())
+            unique_authors.append(author)
+    
+    logger.info(f"[extract_authors] Found authors: {unique_authors}")
+    print(f"[extract_authors] Found authors: {unique_authors}")
+    return unique_authors
 
 def extract_institutions(text):
-    """
-    Metinden potansiyel kurum (affiliation) bilgilerini çıkarır.
-    1) Regex ile 'affiliation', 'department' vb. kısımlara bakar.
-    2) Yoksa spaCy ile ORG etiketlerini çeker.
-    3) İçinde 'university', 'institute' vb. geçenleri tercih eder.
-    """
-    # Denenecek kalıplar (affiliation, institution vs.)
+
+
     affiliation_patterns = [
         r'(?i)(affiliation|department|institution)s?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})',
         r'(?i)(?:\n)(?:\d\s+)?(affiliation|department|institution)s?:?\s*(.*?)(?:\n\n|\n\s*[A-Z]{2,})'
@@ -778,6 +824,7 @@ def extract_institutions(text):
     
     cleaned_inst = list(set(cleaned_inst))
     logger.info(f"[extract_institutions] Found institutions: {cleaned_inst}")
+    print(f"[extract_institutions] Found institutions: {cleaned_inst}")
     return cleaned_inst
 
 def extract_keywords(text, min_keywords=3, max_keywords=10):
@@ -865,9 +912,9 @@ def decrypt_anonymization_map(anon_map, encryption_key):
 
 def anonymize_pdf(pdf_path, anonymize_map):
     """
-    1) Metin redaksiyonu (search_for -> add_redact_annot -> apply_redactions).
-    2) Her sayfadaki gömülü resimleri bularak yüzleri bulanıklaştırır.
-    3) İşlenmiş PDF'yi geçici bir dosyaya kaydedip onun path'ini döndürür.
+    1) Apply text redaction to replace author/institution names with AES encrypted values
+    2) Find embedded images in each page and blur any faces detected
+    3) Save the processed PDF to a temporary file and return its path
     """
     try:
         import fitz
@@ -878,64 +925,61 @@ def anonymize_pdf(pdf_path, anonymize_map):
         doc = fitz.open(pdf_path)
         
         # -------------------------------------------------
-        # A) METİN REDAKSİYONU
+        # A) TEXT REDACTION
         # -------------------------------------------------
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             
-            # 1) Metin anonimleştirme (redaction)
-            for original, replacement in anonymize_map.items():
-                # Tüm eşleşmeleri bul
+            # Apply text anonymization (redaction)
+            for original, encrypted_value in anonymize_map.items():
+                # Find all instances of the original text
                 text_instances = page.search_for(original)
                 for inst in text_instances:
-                    annot = page.add_redact_annot(inst, text=replacement, fill=(1,1,1))
-                # Redaction uygula
-                page.apply_redactions(images=False)  # images=False => resimleri silme
+                    # Add redaction annotation with the encrypted value as replacement
+                    annot = page.add_redact_annot(inst, text=encrypted_value, fill=(1,1,1))
+                # Apply redactions (images=False prevents removing images)
+                page.apply_redactions(images=False)
         
         # -------------------------------------------------
-        # B) GÖMÜLÜ GÖRSELLERİ BULUP YÜZLERİ BULANIKLAŞTIRMA
+        # B) FACE BLURRING IN EMBEDDED IMAGES
         # -------------------------------------------------
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             
-            # Bu liste, sayfadaki tüm resimleri (xref vs.) döndürür
+            # Get list of all images on this page
             image_list = page.get_images(full=True)
             
             if not image_list:
-                continue  # Bu sayfada gömülü resim yok
+                continue  # No images on this page
             
             for img_info in image_list:
-                # genelde img_info[0] xref oluyor
-                # fitz doc: [xref, smask, width, height, bpc, colorspace, ...]
-                xref = img_info[0]
+                xref = img_info[0]  # Image reference
                 
-                # Resmi bellek olarak çek
+                # Extract image data
                 img_dict = safely_extract_image(doc, xref)
                 if not img_dict:
-                    continue  # extraction başarısız
+                    continue  # Failed to extract
                 
                 img_bytes = img_dict["image"]
                 
-                # Yüz tespiti
+                # Detect faces in the image
                 faces = detect_faces(img_bytes)
                 if not faces:
-                    continue  # Yüz yoksa blur gereksiz
+                    continue  # No faces detected
                 
-                # Blur uygula
+                # Apply blur to detected faces
                 blurred_bytes = blur_faces(img_bytes, faces)
                 
-                # Şayet blur uygulanmışsa, orijinalle aynı olmayabilir
+                # If blurring was applied, replace the image
                 if blurred_bytes != img_bytes:
-                    # Şimdi page.update_image ile yenisini koyuyoruz
                     try:
-                        # Not: update_image() PyMuPDF 1.18+ sürümlerde mevcuttur.
+                        # Replace image in the PDF
                         page.replace_image(xref, stream=blurred_bytes)
-                        print("BLURLANDI")
                     except Exception as e:
                         logger.error(f"Failed to update image xref={xref}: {e}")
         
         # -------------------------------------------------
-        # C) Değişiklikleri kaydet
+        # C) SAVE CHANGES
         # -------------------------------------------------
         doc.save(temp_path)
         doc.close()
@@ -945,12 +989,16 @@ def anonymize_pdf(pdf_path, anonymize_map):
     except Exception as e:
         logger.error(f"Error anonymizing PDF: {e}")
         return None
-
     
-def create_anonymization_map(authors, institutions):
+def create_anonymization_map(authors, institutions, emails=None):
     """
     Create a mapping of original text to AES encrypted text
     Returns a dictionary {original: encrypted}
+    
+    Args:
+        authors (list): List of author names to anonymize
+        institutions (list): List of institution names to anonymize
+        emails (list, optional): List of email addresses to anonymize
     """
     # Create a new AES cipher instance
     cipher = AESCipher()
@@ -961,19 +1009,23 @@ def create_anonymization_map(authors, institutions):
     anon_map = {}
     
     # Encrypt authors
-    for idx, author in enumerate(authors):
+    for author in authors:
         encrypted_author = cipher.encrypt(author)
         anon_map[author] = encrypted_author
     
     # Encrypt institutions
-    for idx, institution in enumerate(institutions):
+    for institution in institutions:
         encrypted_institution = cipher.encrypt(institution)
         anon_map[institution] = encrypted_institution
     
+    # Encrypt emails if provided
+    if emails:
+        for email in emails:
+            encrypted_email = cipher.encrypt(email)
+            anon_map[email] = encrypted_email
+    
     # Return both the map and the key
     return anon_map, encryption_key
-
-
 
 
 def detect_faces(image_bytes):
@@ -1194,59 +1246,3 @@ def replace_image_legacy(page, xref, blurred_bytes, bbox):
     # Örneğin, x0,y0,x1,y1 = bbox
     page.insert_image(bbox, stream=blurred_bytes)
 
-def anonymize_pdf_legacy(pdf_path, anonymize_map):
-    """
-    Eski PyMuPDF sürümleriyle çalışan bir örnek:
-    1) Metin redaction
-    2) Her sayfadaki resimleri -> detect_faces -> blur -> insert_image
-    """
-    temp_fd, temp_path = tempfile.mkstemp(suffix='.pdf')
-    os.close(temp_fd)
-    
-    doc = fitz.open(pdf_path)
-    
-    # A) Metin anonimleştirme (redaction)
-    for page_idx in range(len(doc)):
-        page = doc[page_idx]
-        for original, replacement in anonymize_map.items():
-            text_instances = page.search_for(original)
-            for inst in text_instances:
-                annot = page.add_redact_annot(inst, text=replacement, fill=(1,1,1))
-            page.apply_redactions(images=False)
-    
-    # B) Resimleri bul -> yüzleri bulanıklaştır -> insert_image
-    for page_idx in range(len(doc)):
-        page = doc[page_idx]
-        image_list = page.get_images(full=True)
-        if not image_list:
-            continue
-        
-        for img_info in image_list:
-            xref = img_info[0]
-            # Resmi çıkar
-            img_dict = doc.extract_image(xref)
-            if not img_dict:
-                continue
-            
-            img_bytes = img_dict["image"]
-            faces = detect_faces(img_bytes)
-            if not faces:
-                continue
-            
-            blurred_bytes = blur_faces(img_bytes, faces)
-            if blurred_bytes != img_bytes:
-                # Resmi ekleyeceğimiz dikdörtgeni bulmak gerekiyor
-                # Her resmin bounding box'ına erişmek PyMuPDF eski sürümde
-                # doğrudan kolay olmayabilir. Tek seçenek: sayfayı rasterize edin 
-                # veya tahmini bir rect belirleyin. 
-                # Örn. sayfanın tam boyutu:
-                rect = page.rect  # Tam sayfa
-                # Gerçek bounding box'ı bulacaksanız, 
-                #   muhtemelen "img_info"dan width/height alıp 
-                #   sayfadaki konumunu hesaplamanız gerek.
-                
-                replace_image_legacy(page, xref, blurred_bytes, rect)
-    
-    doc.save(temp_path)
-    doc.close()
-    return temp_path

@@ -28,8 +28,9 @@ class Article(models.Model):
     extracted_authors = models.TextField(blank=True, null=True, help_text="Automatically extracted author names")
     extracted_institutions = models.TextField(blank=True, null=True, help_text="Automatically extracted institutions")
     extracted_keywords = models.TextField(blank=True, null=True, help_text="Automatically extracted keywords")
+    extracted_emails = models.TextField(blank=True, null=True, help_text="Automatically extracted email addresses")
     
-    # New fields for AES encryption
+    # Anonymization fields
     anonymization_map = models.TextField(blank=True, null=True, help_text="JSON mapping of original text to encrypted text")
     anonymization_key = models.CharField(max_length=128, blank=True, null=True, help_text="Encryption key for anonymization")
     is_anonymized = models.BooleanField(default=False, help_text="Whether the article has been anonymized")
@@ -49,18 +50,6 @@ class Article(models.Model):
             return self.extracted_authors.split('|')
         return []
     
-    
-    # Add this method to your Article model to get status display name
-
-    def get_status_display(self):
-        """
-        Returns the display name for the current status
-        """
-        for status_code, status_name in self.STATUS_CHOICES:
-            if self.status == status_code:
-                return status_name
-        return self.status  # Fallback to the code if no match
-
     def get_extracted_institutions_list(self):
         """Return extracted institutions as a list"""
         if self.extracted_institutions:
@@ -72,6 +61,21 @@ class Article(models.Model):
         if self.extracted_keywords:
             return self.extracted_keywords.split('|')
         return []
+    
+    def get_extracted_emails_list(self):
+        """Return extracted emails as a list"""
+        if self.extracted_emails:
+            return self.extracted_emails.split('|')
+        return []
+    
+    def get_status_display(self):
+        """
+        Returns the display name for the current status
+        """
+        for status_code, status_name in self.STATUS_CHOICES:
+            if self.status == status_code:
+                return status_name
+        return self.status  # Fallback to the code if no match
     
     def get_anonymization_map(self):
         """Return anonymization map as a dictionary"""
@@ -85,8 +89,7 @@ class Article(models.Model):
     
     def __str__(self):
         return f"{self.tracking_code} - {self.email}"
-    
-    
+
 class Editor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     articles = models.ManyToManyField(Article, blank=True, related_name='editors')

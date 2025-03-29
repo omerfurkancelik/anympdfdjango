@@ -78,6 +78,7 @@
             </div>
             {% else %}
             <!-- If metadata extracted, show anonymization form -->
+            <!-- This is an excerpt to show the relevant part of the form -->
             <div class="bg-white border border-gray-200 rounded-lg p-6 mb-6">
                 <h2 class="text-lg font-medium text-gray-800 mb-4">Extracted Metadata</h2>
                 
@@ -137,6 +138,32 @@
                         {% endif %}
                     </div>
                     
+                    <!-- Email Addresses Section -->
+                    <div>
+                        <h3 class="text-md font-medium text-gray-700 mb-3">Email Addresses</h3>
+                        {% if emails %}
+                        <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <ul class="divide-y divide-gray-200">
+                                {% for email in emails %}
+                                <li class="p-4">
+                                    <div class="flex items-start">
+                                        <div class="flex items-center h-5">
+                                            <input id="email-{{ forloop.counter }}" name="emails" value="{{ email }}" type="checkbox" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                        </div>
+                                        <div class="ml-3 text-sm">
+                                            <label for="email-{{ forloop.counter }}" class="font-medium text-gray-700">{{ email }}</label>
+                                            <p class="text-gray-500">Will be encrypted with AES</p>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% else %}
+                        <p class="text-sm text-gray-500">No email addresses detected.</p>
+                        {% endif %}
+                    </div>
+                    
                     <!-- Keywords Section (for display only) -->
                     <div>
                         <h3 class="text-md font-medium text-gray-700 mb-3">Keywords</h3>
@@ -160,7 +187,7 @@
                             </div>
                             <div class="ml-3">
                                 <p class="text-sm text-indigo-700">
-                                    <strong>AES Encryption:</strong> Selected authors and institutions will be encrypted using AES-256 
+                                    <strong>AES Encryption:</strong> Selected authors, institutions, and email addresses will be encrypted using AES-256 
                                     in the anonymized PDF. Only editors will be able to decrypt the information. Referees will see 
                                     the encrypted values.
                                 </p>
