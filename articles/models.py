@@ -154,24 +154,20 @@ class ChatMessage(models.Model):
 
 
 
-class Log(models.Model):
-    LOG_TYPES = (
-        ('info', 'Information'),
-        ('warning', 'Warning'),
-        ('error', 'Error'),
-        ('success', 'Success'),
-        ('action', 'User Action'),
-    )
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    log_desc = models.TextField(verbose_name="Log Description")
-    log_type = models.CharField(max_length=20, choices=LOG_TYPES, default='info')
-    created_at = models.DateTimeField(auto_now_add=True)
+class ActivityLog(models.Model):
+    """Model to track all activities related to articles"""
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name='logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    email = models.EmailField(blank=True, null=True)  # For anonymous users
+    action = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        ordering = ['-created_at']
-        verbose_name = "Log"
-        verbose_name_plural = "Logs"
+        ordering = ['-timestamp']
     
     def __str__(self):
-        return f"{self.get_log_type_display()}: {self.log_desc[:50]}..."
+        if self.user:
+            actor = self.user.username
+        else:
+            actor = self.email or "System"
+        return f"{actor} - {self.action} - {self.article.tracking_code}"
