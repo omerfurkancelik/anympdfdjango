@@ -1,0 +1,222 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Select Items to Decrypt</h1>
+                <a href="{% url 'editor_review' article.id %}" class="text-indigo-600 hover:text-indigo-900">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Article
+                </a>
+            </div>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-blue-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-blue-700">
+                            Select encrypted items and click "Decrypt Selected Items" to view their original values.
+                            Once you've reviewed them, you can update the anonymized PDF with these decryptions.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <form id="decryption-form" method="post" class="space-y-8">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="decrypt_selected">
+                
+                <!-- Authors Section -->
+                {% if authors %}
+                <div class="mb-6">
+                    <h2 class="text-lg font-medium text-gray-800 mb-4">Author Names</h2>
+                    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <ul class="divide-y divide-gray-200">
+                            {% for encrypted, original in authors %}
+                            <li class="p-4">
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="author-{{ forloop.counter }}" name="decrypt_items" 
+                                               value="{{ encrypted }}:::{{ original }}" type="checkbox" 
+                                               class="decrypt-checkbox focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                    </div>
+                                    <div class="ml-3 flex-grow">
+                                        <label for="author-{{ forloop.counter }}" class="text-sm font-medium text-gray-700">
+                                            <span class="font-mono text-xs text-gray-500 break-all">{{ encrypted }}</span>
+                                        </label>
+                                        
+                                        <!-- This div will be populated with decrypted data when "Decrypt" is clicked -->
+                                        <div class="decrypted-value mt-2 hidden">
+                                            <div class="flex items-center">
+                                                <span class="text-sm text-gray-800 bg-green-50 px-3 py-1 rounded-md border border-green-100">
+                                                    <i class="fas fa-unlock-alt text-green-500 mr-1"></i>
+                                                    <span class="font-medium">Original:</span> {{ original }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Institutions Section -->
+                {% if institutions %}
+                <div class="mb-6">
+                    <h2 class="text-lg font-medium text-gray-800 mb-4">Institutions</h2>
+                    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <ul class="divide-y divide-gray-200">
+                            {% for encrypted, original in institutions %}
+                            <li class="p-4">
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="institution-{{ forloop.counter }}" name="decrypt_items" 
+                                               value="{{ encrypted }}:::{{ original }}" type="checkbox" 
+                                               class="decrypt-checkbox focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                    </div>
+                                    <div class="ml-3 flex-grow">
+                                        <label for="institution-{{ forloop.counter }}" class="text-sm font-medium text-gray-700">
+                                            <span class="font-mono text-xs text-gray-500 break-all">{{ encrypted }}</span>
+                                        </label>
+                                        
+                                        <!-- This div will be populated with decrypted data when "Decrypt" is clicked -->
+                                        <div class="decrypted-value mt-2 hidden">
+                                            <div class="flex items-center">
+                                                <span class="text-sm text-gray-800 bg-green-50 px-3 py-1 rounded-md border border-green-100">
+                                                    <i class="fas fa-unlock-alt text-green-500 mr-1"></i>
+                                                    <span class="font-medium">Original:</span> {{ original }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Emails Section -->
+                {% if emails %}
+                <div class="mb-6">
+                    <h2 class="text-lg font-medium text-gray-800 mb-4">Email Addresses</h2>
+                    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <ul class="divide-y divide-gray-200">
+                            {% for encrypted, original in emails %}
+                            <li class="p-4">
+                                <div class="flex items-start">
+                                    <div class="flex items-center h-5">
+                                        <input id="email-{{ forloop.counter }}" name="decrypt_items" 
+                                               value="{{ encrypted }}:::{{ original }}" type="checkbox" 
+                                               class="decrypt-checkbox focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                    </div>
+                                    <div class="ml-3 flex-grow">
+                                        <label for="email-{{ forloop.counter }}" class="text-sm font-medium text-gray-700">
+                                            <span class="font-mono text-xs text-gray-500 break-all">{{ encrypted }}</span>
+                                        </label>
+                                        
+                                        <!-- This div will be populated with decrypted data when "Decrypt" is clicked -->
+                                        <div class="decrypted-value mt-2 hidden">
+                                            <div class="flex items-center">
+                                                <span class="text-sm text-gray-800 bg-green-50 px-3 py-1 rounded-md border border-green-100">
+                                                    <i class="fas fa-unlock-alt text-green-500 mr-1"></i>
+                                                    <span class="font-medium">Original:</span> {{ original }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Action Buttons -->
+                <div class="flex flex-col sm:flex-row justify-center sm:space-x-4 space-y-3 sm:space-y-0">
+                    <button type="button" id="decrypt-button" class="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-key mr-2"></i> Decrypt Selected Items
+                    </button>
+                    <button type="submit" name="action" value="update_pdf" class="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-file-pdf mr-2"></i> Update Anonymized PDF
+                    </button>
+                </div>
+                
+                <div class="mt-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-exclamation-triangle text-yellow-500"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-yellow-700">
+                                <strong>Important:</strong> When you update the anonymized PDF, it will replace the existing file. 
+                                This means when referees download the anonymized version, they will see the selected items in their decrypted form.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="flex justify-between">
+                        <button type="button" id="select-all" class="text-sm text-indigo-600 hover:text-indigo-900">
+                            Select All
+                        </button>
+                        <button type="button" id="select-none" class="text-sm text-indigo-600 hover:text-indigo-900">
+                            Deselect All
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Select/deselect all checkboxes
+    document.getElementById('select-all').addEventListener('click', function() {
+        document.querySelectorAll('.decrypt-checkbox').forEach(function(checkbox) {
+            checkbox.checked = true;
+        });
+    });
+    
+    document.getElementById('select-none').addEventListener('click', function() {
+        document.querySelectorAll('.decrypt-checkbox').forEach(function(checkbox) {
+            checkbox.checked = false;
+        });
+    });
+    
+    // Handle decrypt button click
+    document.getElementById('decrypt-button').addEventListener('click', function() {
+        // Get all checked checkboxes
+        const checkedItems = document.querySelectorAll('.decrypt-checkbox:checked');
+        
+        if (checkedItems.length === 0) {
+            alert('Please select at least one item to decrypt.');
+            return;
+        }
+        
+        // Show decrypted values for selected items
+        checkedItems.forEach(function(checkbox) {
+            // Find the decrypted value container within the same list item
+            const decryptedDiv = checkbox.closest('li').querySelector('.decrypted-value');
+            decryptedDiv.classList.remove('hidden');
+        });
+        
+        // Hide decrypted values for unselected items
+        document.querySelectorAll('.decrypt-checkbox:not(:checked)').forEach(function(checkbox) {
+            const decryptedDiv = checkbox.closest('li').querySelector('.decrypted-value');
+            decryptedDiv.classList.add('hidden');
+        });
+    });
+</script>
+{% endblock %}

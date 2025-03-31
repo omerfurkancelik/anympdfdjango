@@ -28,6 +28,8 @@ urlpatterns = [
     path('editor/article/<int:article_id>/suggest-referees/', views.suggest_referees, name='suggest_referees'),
     path('editor/reset-database/', views.reset_database, name='reset_database'),
     path('editor/reset-database-orm/', views.reset_database_orm, name='reset_database_orm'),
+    path('article/<int:article_id>/decrypt/', views.decrypt_article, name='decrypt_article'),
+    path('article/<int:article_id>/decrypt/select/', views.select_items_to_decrypt, name='select_items_to_decrypt'),
     
     
     # Referee section

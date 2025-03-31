@@ -17,7 +17,7 @@ import datetime
 from django.core.files.base import ContentFile
 from .utils import (extract_text_from_pdf, extract_authors, extract_emails, extract_institutions, 
                    extract_keywords, create_anonymization_map, anonymize_pdf,
-                   match_referees_by_keywords)
+                   match_referees_by_keywords, decrypt_pdf)
 import json
 
 
@@ -1180,3 +1180,192 @@ def restore_article_info(request, article_id, referee_id):
         'institutions': institutions,
         'emails': emails
     })
+
+def decrypt_article(request, article_id):
+    """Handle decryption requests from the editor"""
+    article = get_object_or_404(Article, id=article_id)
+    
+    if not article.is_anonymized or not article.anonymization_key:
+        messages.error(request, "This article has not been anonymized.")
+        return redirect('editor_review', article_id=article.id)
+    
+    # Get anonymization map
+    anon_map = article.get_anonymization_map()
+    
+    # Check if there's anything to decrypt
+    if not anon_map:
+        messages.error(request, "No anonymization mapping found for this article.")
+        return redirect('editor_review', article_id=article.id)
+    
+    try:
+        # Get selected decryption options
+        decrypt_authors = 'decrypt_authors' in request.POST
+        decrypt_institutions = 'decrypt_institutions' in request.POST
+        decrypt_emails = 'decrypt_emails' in request.POST
+        action = request.POST.get('action', 'view_mapping')
+        
+        # Create categorized mappings
+        authors = []
+        institutions = []
+        emails = []
+        
+        for original, encrypted in anon_map.items():
+            # Check if this is an email
+            if '@' in original and '.' in original.split('@')[1]:
+                if decrypt_emails:
+                    emails.append((encrypted, original))
+            # Check if this is an institution
+            elif any(keyword in original.lower() for keyword in 
+                    ["university", "institute", "college", "department", 
+                    "lab", "laboratory", "center", "centre", "school"]):
+                if decrypt_institutions:
+                    institutions.append((encrypted, original))
+            # Otherwise assume it's an author
+            else:
+                if decrypt_authors:
+                    authors.append((encrypted, original))
+        
+        if action == 'view_mapping':
+            # Display the mapping in a table view
+            return render(request, 'articles/editor/decryption_mapping.html', {
+                'article': article,
+                'authors': authors,
+                'institutions': institutions,
+                'emails': emails
+            })
+        
+        elif action == 'generate_pdf':
+            # Create a decryption mapping based on selections
+            decrypt_map = {}
+            
+            for encrypted, original in authors + institutions + emails:
+                decrypt_map[encrypted] = original
+            
+            if not decrypt_map:
+                messages.warning(request, "No items selected for decryption.")
+                return redirect('editor_review', article_id=article.id)
+            
+            # Generate decrypted PDF
+            anonymized_pdf_path = article.anonymized_file.path
+            decrypted_path = decrypt_pdf(anonymized_pdf_path, decrypt_map)
+            
+            if decrypted_path:
+                # Serve the file for download
+                with open(decrypted_path, 'rb') as f:
+                    response = HttpResponse(f.read(), content_type='application/pdf')
+                    response['Content-Disposition'] = f'attachment; filename="decrypted_{article.tracking_code}.pdf"'
+                
+                # Clean up temporary file
+                os.remove(decrypted_path)
+                
+                return response
+            else:
+                messages.error(request, "Failed to generate decrypted PDF.")
+        
+        return redirect('editor_review', article_id=article.id)
+    
+    except Exception as e:
+        messages.error(request, f"Error during decryption: {e}")
+        return redirect('editor_review', article_id=article.id)
+    
+    
+    
+    
+def select_items_to_decrypt(request, article_id):
+    """View for selecting specific encrypted items to decrypt"""
+    article = get_object_or_404(Article, id=article_id)
+    
+    if not article.is_anonymized or not article.anonymization_key:
+        messages.error(request, "This article has not been anonymized.")
+        return redirect('editor_review', article_id=article.id)
+    
+    # Get anonymization map
+    anon_map = article.get_anonymization_map()
+    
+    # Check if there's anything to decrypt
+    if not anon_map:
+        messages.error(request, "No anonymization mapping found for this article.")
+        return redirect('editor_review', article_id=article.id)
+    
+    try:
+        # Create categorized mappings
+        authors = []
+        institutions = []
+        emails = []
+        
+        for original, encrypted in anon_map.items():
+            # Check if this is an email
+            if '@' in original and '.' in original.split('@')[1]:
+                emails.append((encrypted, original))
+            # Check if this is an institution
+            elif any(keyword in original.lower() for keyword in 
+                    ["university", "institute", "college", "department", 
+                    "lab", "laboratory", "center", "centre", "school"]):
+                institutions.append((encrypted, original))
+            # Otherwise assume it's an author
+            else:
+                authors.append((encrypted, original))
+        
+        if request.method == 'POST' and request.POST.get('action') == 'update_pdf':
+            # Get selected items to decrypt
+            selected_items = request.POST.getlist('decrypt_items')
+            
+            if not selected_items:
+                messages.warning(request, "No items selected for decryption.")
+                return redirect('select_items_to_decrypt', article_id=article.id)
+            
+            # Create decryption mapping for selected items
+            decrypt_map = {}
+            for item in selected_items:
+                # Item format is "encrypted_value:::original_value"
+                encrypted, original = item.split(":::", 1)
+                decrypt_map[encrypted] = original
+            
+            # Generate decrypted PDF
+            anonymized_pdf_path = article.anonymized_file.path
+            decrypted_path = decrypt_pdf(anonymized_pdf_path, decrypt_map)
+            
+            if decrypted_path:
+                # Replace the anonymized file with the decrypted version
+                with open(decrypted_path, 'rb') as f:
+                    # Get original filename
+                    original_filename = os.path.basename(article.anonymized_file.name)
+                    
+                    # Delete the old anonymized file
+                    article.anonymized_file.delete(save=False)
+                    
+                    # Save the new decrypted file with the same name
+                    article.anonymized_file.save(original_filename, ContentFile(f.read()))
+                
+                # Clean up temporary file
+                os.remove(decrypted_path)
+                
+                # Update article to note decryption was performed
+                article.save()
+                
+                # Log the decryption action
+                user = request.user if request.user.is_authenticated else None
+                item_count = len(decrypt_map)
+                log_activity(
+                    article,
+                    f"Partially decrypted anonymized PDF ({item_count} items)", 
+                    user=user
+                )
+                
+                messages.success(request, f"Successfully decrypted {item_count} items in the anonymized PDF.")
+                return redirect('editor_review', article_id=article.id)
+            else:
+                messages.error(request, "Failed to generate decrypted PDF.")
+                return redirect('select_items_to_decrypt', article_id=article.id)
+        
+        # Render the selection form
+        return render(request, 'articles/editor/select_decrypt_items.html', {
+            'article': article,
+            'authors': authors,
+            'institutions': institutions,
+            'emails': emails
+        })
+    
+    except Exception as e:
+        messages.error(request, f"Error processing decryption: {e}")
+        return redirect('editor_review', article_id=article.id)

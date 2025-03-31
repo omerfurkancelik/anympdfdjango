@@ -1,0 +1,153 @@
+{% extends 'articles/base.html' %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-lg shadow-card overflow-hidden">
+        <div class="gradient-bg h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Decryption Mapping for {{ article.tracking_code }}</h1>
+                <a href="{% url 'editor_review' article.id %}" class="text-indigo-600 hover:text-indigo-900">
+                    <i class="fas fa-arrow-left mr-1"></i> Back to Article
+                </a>
+            </div>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-info-circle text-blue-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-blue-700">
+                            This view shows the mapping between encrypted values and original text based on your selection.
+                            Only editors can see this information.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Authors Section -->
+            {% if authors %}
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Author Names</h2>
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Encrypted Value</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for encrypted, original in authors %}
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-mono text-gray-600">
+                                        <div class="max-w-lg overflow-auto">{{ encrypted }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium text-indigo-600">{{ original }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Institutions Section -->
+            {% if institutions %}
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Institutions</h2>
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Encrypted Value</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for encrypted, original in institutions %}
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-mono text-gray-600">
+                                        <div class="max-w-lg overflow-auto">{{ encrypted }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium text-indigo-600">{{ original }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Emails Section -->
+            {% if emails %}
+            <div class="mb-6">
+                <h2 class="text-lg font-medium text-gray-800 mb-4">Email Addresses</h2>
+                <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Encrypted Value</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                {% for encrypted, original in emails %}
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-mono text-gray-600">
+                                        <div class="max-w-lg overflow-auto">{{ encrypted }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm font-medium text-indigo-600">{{ original }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if not authors and not institutions and not emails %}
+            <div class="bg-yellow-50 p-6 rounded-lg border border-yellow-200 text-center">
+                <div class="text-yellow-500 mb-2">
+                    <i class="fas fa-exclamation-triangle text-3xl"></i>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 mb-1">No Items Selected</h3>
+                <p class="text-gray-600">No items were selected for decryption. Please go back and select at least one type of information to decrypt.</p>
+            </div>
+            {% endif %}
+            
+            <!-- Action Buttons -->
+            <div class="mt-6 flex justify-center space-x-4">
+                <a href="{% url 'editor_review' article.id %}" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-arrow-left mr-2"></i> Back to Article
+                </a>
+                
+                {% if authors or institutions or emails %}
+                <form method="post" action="{% url 'decrypt_article' article.id %}">
+                    {% csrf_token %}
+                    {% for encrypted, original in authors %}
+                    <input type="hidden" name="decrypt_authors" value="on">
+                    {% endfor %}
+                    {% for encrypted, original in institutions %}
+                    <input type="hidden" name="decrypt_institutions" value="on">
+                    {% endfor %}
+                    {% for encrypted, original in emails %}
+                    <input type="hidden" name="decrypt_emails" value="on">
+                    {% endfor %}
+                    <button type="submit" name="action" value="generate_pdf" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-file-pdf mr-2"></i> Generate Decrypted PDF
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

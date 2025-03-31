@@ -1213,36 +1213,47 @@ def match_referees_by_keywords(article_keywords, referees):
     return sorted(referee_scores, key=lambda x: x[1], reverse=True)
 
 
-
-def safe_operation(operation_func, error_message, default_return=None, *args, **kwargs):
-    """
-    Wrapper function to execute operations safely within a try-except block
     
-    Args:
-        operation_func: Function to execute
-        error_message: Message to log if an error occurs
-        default_return: Value to return if the operation fails
-        *args, **kwargs: Arguments to pass to operation_func
-        
-    Returns:
-        Result of operation_func or default_return if an error occurs
+    
+
+
+def decrypt_pdf(pdf_path, decrypt_map):
+    """
+    Replace encrypted values with original text in the PDF
+    Returns path to decrypted PDF
     """
     try:
-        return operation_func(*args, **kwargs)
+        import fitz  # PyMuPDF
+        
+        # Create temporary file for the result
+        temp_fd, temp_path = tempfile.mkstemp(suffix='.pdf')
+        os.close(temp_fd)
+        
+        # Open the PDF
+        doc = fitz.open(pdf_path)
+        
+        # Process each page
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+            
+            # For each encrypted value, find and replace with original
+            for encrypted, original in decrypt_map.items():
+                # Find all instances of the encrypted value
+                text_instances = page.search_for(encrypted)
+                
+                for inst in text_instances:
+                    # Add redaction annotation with the original value as replacement
+                    annot = page.add_redact_annot(inst, text=original, fill=(1,1,1))
+                
+                # Apply redactions (images=False prevents removing images)
+                page.apply_redactions(images=False)
+        
+        # Save the result
+        doc.save(temp_path)
+        doc.close()
+        
+        return temp_path
+    
     except Exception as e:
-        logger.error(f"{error_message}: {e}")
-        return default_return
-    
-    
-    
-import fitz
-
-def replace_image_legacy(page, xref, blurred_bytes, bbox):
-    """
-    Eski PyMuPDF sürümünde page.update_image() yoksa,
-    yeni resmi belirlenen 'bbox' bölgesine insert_image ile ekliyoruz.
-    'xref'li orijinal resim durabilir, ama görsel olarak kaplamış oluruz.
-    """
-    # Örneğin, x0,y0,x1,y1 = bbox
-    page.insert_image(bbox, stream=blurred_bytes)
-
+        logger.error(f"Error decrypting PDF: {e}")
+        return None
