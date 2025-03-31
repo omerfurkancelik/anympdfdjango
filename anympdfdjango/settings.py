@@ -10,8 +10,8 @@ SECRET_KEY = 'your-secret-key-here'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["24cb-159-146-16-241.ngrok-free.app","127.0.0.1"]
-CSRF_TRUSTED_ORIGINS = ['https://24cb-159-146-16-241.ngrok-free.app','http://127.0.0.1']
+ALLOWED_HOSTS = ["00f9-2a09-bac1-7280-8-00-3d6-3e.ngrok-free.app","127.0.0.1"]
+CSRF_TRUSTED_ORIGINS = ['https://00f9-2a09-bac1-7280-8-00-3d6-3e.ngrok-free.app','http://127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [

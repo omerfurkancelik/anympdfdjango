@@ -278,11 +278,11 @@ def referee_quick_action(request, article_id, referee_id):
                 feedback.save()
             
             # Create system message
-            ChatMessage.objects.create(
+            """ChatMessage.objects.create(
                 article=article,
                 sender_user=request.user,
                 content=f"Revision requested by referee: {referee.user.username}"
-            )
+            )"""
             
             messages.success(request, f"Revision has been requested for article {article.tracking_code}.")
         
